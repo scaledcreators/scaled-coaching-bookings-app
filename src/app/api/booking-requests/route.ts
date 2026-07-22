@@ -4,13 +4,13 @@ import { getApplicableAvailabilityRules } from "@/lib/availability-server";
 import { slotFitsAvailability } from "@/lib/availability-time";
 import { notifyCoachOfRequest } from "@/lib/booking-notifications";
 import { companyIdForExperience } from "@/lib/data";
+import { getSingleActiveCoach } from "@/lib/single-coach";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
 const schema = z.object({
   experienceId: z.string().startsWith("exp_"),
   companyId: z.string().startsWith("biz_"),
   offerId: z.string().uuid(),
-  coachId: z.string().uuid().nullable().optional(),
   startsAt: z.iso.datetime(),
   timezone: z.string().min(1).max(100),
   intakeAnswers: z.record(z.string(), z.unknown()).default({}),
@@ -36,7 +36,7 @@ export async function POST(request: Request) {
     ] = await Promise.all([
       supabase
         .from("booking_settings")
-        .select("emergency_paused")
+        .select("emergency_paused,default_timezone")
         .eq("whop_company_id", input.companyId)
         .maybeSingle(),
       supabase
@@ -58,35 +58,8 @@ export async function POST(request: Request) {
       );
     }
 
-    if (input.coachId) {
-      const { data: coach } = await supabase
-        .from("coaches")
-        .select("id")
-        .eq("id", input.coachId)
-        .eq("whop_company_id", input.companyId)
-        .eq("status", "active")
-        .maybeSingle();
-      if (!coach) {
-        return Response.json(
-          { error: "That coach is not available." },
-          { status: 409 },
-        );
-      }
-
-      const { data: links } = await supabase
-        .from("offer_coaches")
-        .select("coach_id")
-        .eq("offer_id", input.offerId);
-      if (
-        (links?.length ?? 0) > 0 &&
-        !links?.some((link) => link.coach_id === input.coachId)
-      ) {
-        return Response.json(
-          { error: "That coach is not assigned to this offer." },
-          { status: 409 },
-        );
-      }
-    }
+    const coach = await getSingleActiveCoach(supabase, input.companyId);
+    const bookingTimezone = settings?.default_timezone || coach.timezone;
 
     const startsAt = new Date(input.startsAt);
     const endsAt = new Date(
@@ -105,7 +78,7 @@ export async function POST(request: Request) {
       supabase,
       input.companyId,
       input.offerId,
-      input.coachId ?? null,
+      coach.id,
     );
     if (!slotFitsAvailability(startsAt, endsAt, rules)) {
       return Response.json(
@@ -125,7 +98,7 @@ export async function POST(request: Request) {
       {
         p_company_id: input.companyId,
         p_offer_id: input.offerId,
-        p_coach_id: input.coachId ?? null,
+        p_coach_id: coach.id,
         p_starts_at: blockedStartsAt.toISOString(),
         p_ends_at: blockedEndsAt.toISOString(),
         p_ignore_booking_id: null,
@@ -149,11 +122,11 @@ export async function POST(request: Request) {
         p_user_id: viewer.userId,
         p_experience_id: input.experienceId,
         p_offer_id: input.offerId,
-        p_coach_id: input.coachId ?? null,
+        p_coach_id: coach.id,
         p_status: "pending_approval",
         p_starts_at: startsAt.toISOString(),
         p_ends_at: endsAt.toISOString(),
-        p_timezone: input.timezone,
+        p_timezone: bookingTimezone,
         p_intake_answers: input.intakeAnswers,
         p_member_note: input.memberNote,
       },
@@ -164,6 +137,21 @@ export async function POST(request: Request) {
           {
             error:
               "That time was just taken or is unavailable. Choose another time.",
+          },
+          { status: 409 },
+        );
+      }
+      if (bookingCreateError.message.includes("DAY_AT_CAPACITY")) {
+        return Response.json(
+          { error: "That day has reached its booking capacity." },
+          { status: 409 },
+        );
+      }
+      if (bookingCreateError.message.includes("MEMBER_DAILY_LIMIT")) {
+        return Response.json(
+          {
+            error:
+              "You already have a booking on that day. Choose another date.",
           },
           { status: 409 },
         );

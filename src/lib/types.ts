@@ -94,9 +94,17 @@ export type Coach = {
   id: string;
   whop_company_id: string;
   name: string;
+  avatar_url?: string | null;
   bio: string | null;
   timezone: string;
   status: "active" | "hidden" | "archived";
+};
+
+export type CapacityOverride = {
+  id: string;
+  whop_company_id: string;
+  capacity_date: string;
+  max_bookings: number;
 };
 
 export type AvailabilityRule = {
@@ -136,6 +144,7 @@ export type BookingAppearance = {
 export type BookingSettings = BookingAppearance & {
   emergency_paused: boolean;
   default_timezone: string;
+  default_daily_capacity: number;
   support_contact: string | null;
 };
 
@@ -146,6 +155,7 @@ export type DashboardData = {
   unavailable: UnavailableWindow[];
   coaches: Coach[];
   availability: AvailabilityRule[];
+  capacityOverrides: CapacityOverride[];
   settings: BookingSettings;
   emergencyPaused: boolean;
   demo: boolean;

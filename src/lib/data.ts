@@ -61,6 +61,7 @@ export async function getCompanyData(
     unavailable,
     coaches,
     availability,
+    capacityOverrides,
     settings,
     appearance,
   ] = await Promise.all([
@@ -88,8 +89,8 @@ export async function getCompanyData(
       .from("coaches")
       .select("*")
       .eq("whop_company_id", companyId)
-      .neq("status", "archived")
-      .order("name"),
+      .eq("status", "active")
+      .order("created_at"),
     supabase
       .from("availability_rules")
       .select("*")
@@ -97,8 +98,15 @@ export async function getCompanyData(
       .eq("status", "active")
       .order("weekday"),
     supabase
+      .from("booking_capacity_overrides")
+      .select("*")
+      .eq("whop_company_id", companyId)
+      .order("capacity_date"),
+    supabase
       .from("booking_settings")
-      .select("emergency_paused,default_timezone,support_contact")
+      .select(
+        "emergency_paused,default_timezone,default_daily_capacity,support_contact",
+      )
       .eq("whop_company_id", companyId)
       .maybeSingle(),
     readCompanyAppearance(companyId),
@@ -110,6 +118,7 @@ export async function getCompanyData(
     unavailable,
     coaches,
     availability,
+    capacityOverrides,
     settings,
   ]) {
     if (result.error) throw result.error;
@@ -149,6 +158,7 @@ export async function getCompanyData(
     unavailable: unavailable.data ?? [],
     coaches: coaches.data ?? [],
     availability: availability.data ?? [],
+    capacityOverrides: capacityOverrides.data ?? [],
     settings: settings.data
       ? {
           ...appearance,
@@ -160,6 +170,7 @@ export async function getCompanyData(
           ...appearance,
           emergency_paused: false,
           default_timezone: "America/Chicago",
+          default_daily_capacity: 4,
           support_contact: DEFAULT_SUPPORT_CONTACT,
         },
     emergencyPaused: settings.data?.emergency_paused ?? false,

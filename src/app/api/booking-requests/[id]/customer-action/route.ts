@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireRequestViewer } from "@/lib/auth";
 import { getApplicableAvailabilityRules } from "@/lib/availability-server";
 import { slotFitsAvailability } from "@/lib/availability-time";
+import { bookingDayConflict } from "@/lib/booking-capacity";
 import { companyIdForExperience } from "@/lib/data";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { whop } from "@/lib/whop";
@@ -116,6 +117,26 @@ export async function POST(
     }
 
     const end = new Date(start.getTime() + offer.duration_minutes * 60_000);
+    const conflict = await bookingDayConflict({
+      supabase,
+      companyId,
+      userId: viewer.userId,
+      startsAt: start,
+      timezone: booking.timezone || "America/Chicago",
+      ignoreBookingId: id,
+    });
+    if (conflict === "MEMBER_DAILY_LIMIT") {
+      return Response.json(
+        { error: "You already have another booking on that day." },
+        { status: 409 },
+      );
+    }
+    if (conflict === "DAY_AT_CAPACITY") {
+      return Response.json(
+        { error: "That day has reached its booking capacity." },
+        { status: 409 },
+      );
+    }
     const rules = await getApplicableAvailabilityRules(
       supabase,
       companyId,

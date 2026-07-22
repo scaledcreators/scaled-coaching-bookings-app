@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { requireRequestViewer } from "@/lib/auth";
 import { notifyCustomer } from "@/lib/booking-notifications";
+import { getSingleActiveCoach } from "@/lib/single-coach";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { whop } from "@/lib/whop";
 
@@ -10,7 +11,6 @@ const PAYMENT_CUTOFF_BEFORE_SESSION_MINUTES = 60;
 const schema = z.object({
   companyId: z.string().startsWith("biz_"),
   action: z.enum(["approve", "reject"]),
-  coachId: z.string().uuid().nullable().optional(),
 });
 
 export async function POST(
@@ -113,26 +113,7 @@ export async function POST(
       return Response.json({ booking: data });
     }
 
-    const coachId = input.coachId ?? booking.coach_id;
-    if (!coachId) {
-      return Response.json(
-        { error: "Assign a coach before approving this request." },
-        { status: 409 },
-      );
-    }
-    const { data: coach } = await supabase
-      .from("coaches")
-      .select("id")
-      .eq("id", coachId)
-      .eq("whop_company_id", input.companyId)
-      .eq("status", "active")
-      .maybeSingle();
-    if (!coach) {
-      return Response.json(
-        { error: "That coach is not available." },
-        { status: 409 },
-      );
-    }
+    const coach = await getSingleActiveCoach(supabase, input.companyId);
 
     const offer = booking.booking_offers;
     const willRequirePayment =
@@ -162,7 +143,7 @@ export async function POST(
       {
         p_booking_id: id,
         p_company_id: input.companyId,
-        p_coach_id: coachId,
+        p_coach_id: coach.id,
         p_payment_due_at: paymentDueAt.toISOString(),
       },
     );

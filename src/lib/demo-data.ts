@@ -11,6 +11,7 @@ export const demoData: DashboardData = {
   settings: {
     emergency_paused: false,
     default_timezone: "America/Chicago",
+    default_daily_capacity: 4,
     support_contact: "support@scaledcreators.com",
     display_name: "Coaching Bookings",
     logo_url: null,
@@ -19,8 +20,7 @@ export const demoData: DashboardData = {
     theme_accent: "#a84a32",
     theme_highlight: "#ff7849",
   },
-  availability: [1, 2, 3, 4, 5].flatMap((weekday) => [
-    {
+  availability: [1, 2, 3, 4, 5].map((weekday) => ({
       id: `rule_graham_${weekday}`,
       whop_company_id: companyId,
       coach_id: "coach_graham",
@@ -30,33 +30,14 @@ export const demoData: DashboardData = {
       end_time: "17:00:00",
       timezone: "America/Chicago",
       status: "active" as const,
-    },
-    {
-      id: `rule_maya_${weekday}`,
-      whop_company_id: companyId,
-      coach_id: "coach_maya",
-      offer_id: null,
-      weekday,
-      start_time: "10:00:00",
-      end_time: "16:00:00",
-      timezone: "America/Chicago",
-      status: "active" as const,
-    },
-  ]),
+    })),
+  capacityOverrides: [],
   coaches: [
     {
       id: "coach_graham",
       whop_company_id: companyId,
       name: "Graham Lee",
       bio: "Growth strategy and creator systems",
-      timezone: "America/Chicago",
-      status: "active",
-    },
-    {
-      id: "coach_maya",
-      whop_company_id: companyId,
-      name: "Maya Chen",
-      bio: "Offer positioning and conversion",
       timezone: "America/Chicago",
       status: "active",
     },
@@ -157,7 +138,7 @@ export const demoData: DashboardData = {
       whop_user_id: "user_demo_member",
       whop_experience_id: "exp_demo",
       offer_id: "offer_audit",
-      coach_id: "coach_maya",
+      coach_id: "coach_graham",
       status: "confirmed",
       requested_start_at: hours(51),
       requested_end_at: hours(52),

@@ -14,7 +14,10 @@ import {
   X,
 } from "lucide-react";
 import type { Booking, DashboardData, Offer } from "@/lib/types";
-import { CustomSelect } from "@/components/custom-select";
+import {
+  BookingCalendar,
+  type BookingCalendarDay,
+} from "@/components/booking-calendar";
 import { DEFAULT_SUPPORT_CONTACT } from "@/lib/constants";
 import { AppBrand } from "@/components/app-brand";
 import { TenantThemeProvider } from "@/components/tenant-theme-provider";
@@ -35,6 +38,39 @@ const previewSlots = [2, 3, 4, 7, 8].map((days, index) => {
   date.setHours([10, 13, 15, 11, 14][index], 0, 0, 0);
   return date;
 });
+
+function dateKeyInTimezone(value: Date, timezone: string) {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    })
+      .formatToParts(value)
+      .filter((part) => part.type !== "literal")
+      .map((part) => [part.type, part.value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+function monthKeyInTimezone(value: Date, timezone: string) {
+  return dateKeyInTimezone(value, timezone).slice(0, 7);
+}
+
+function groupPreviewDays(timezone: string): BookingCalendarDay[] {
+  const grouped = new Map<string, string[]>();
+  for (const slot of previewSlots) {
+    const key = dateKeyInTimezone(slot, timezone);
+    grouped.set(key, [...(grouped.get(key) ?? []), slot.toISOString()]);
+  }
+  return [...grouped.entries()].map(([date, slots]) => ({
+    date,
+    slots,
+    capacity: 4,
+    bookedCount: 0,
+  }));
+}
 
 export function MemberExperience({
   experienceId,
@@ -643,46 +679,79 @@ function BookingFlow({
   onClose: () => void;
   onSubmitted: (booking: Booking) => void;
 }) {
-  const eligible = offer.coach_ids?.length
-    ? data.coaches.filter((coach) => offer.coach_ids?.includes(coach.id))
-    : data.coaches;
-  const [coachId, setCoachId] = useState(eligible[0]?.id ?? "");
+  const timezone = data.settings.default_timezone;
+  const previewDays = groupPreviewDays(timezone);
+  const initialMonth = data.demo
+    ? previewDays[0]?.date.slice(0, 7) ??
+      monthKeyInTimezone(new Date(), timezone)
+    : monthKeyInTimezone(new Date(), timezone);
   const [step, setStep] = useState(1);
   const [slot, setSlot] = useState("");
+  const [selectedDate, setSelectedDate] = useState("");
+  const [month, setMonth] = useState(initialMonth);
+  const [earliestMonth, setEarliestMonth] = useState(initialMonth);
+  const [latestMonth, setLatestMonth] = useState(
+    data.demo
+      ? previewDays.at(-1)?.date.slice(0, 7) ?? initialMonth
+      : initialMonth,
+  );
   const [goal, setGoal] = useState("");
   const [note, setNote] = useState("");
   const [sent, setSent] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  const [slots, setSlots] = useState<Date[]>(data.demo ? previewSlots : []);
-  const [slotLimit, setSlotLimit] = useState(16);
+  const [days, setDays] = useState<BookingCalendarDay[]>(
+    data.demo
+      ? previewDays.filter((day) => day.date.startsWith(initialMonth))
+      : [],
+  );
   const [loading, setLoading] = useState(!data.demo);
   useEffect(() => {
     if (data.demo) return;
-    const query = new URLSearchParams({ experienceId, offerId: offer.id });
-    if (coachId) query.set("coachId", coachId);
-    fetch(`/api/availability/slots?${query}`)
+    const controller = new AbortController();
+    let active = true;
+    const query = new URLSearchParams({
+      experienceId,
+      offerId: offer.id,
+      month,
+    });
+    fetch(`/api/availability/slots?${query}`, { signal: controller.signal })
       .then(async (response) => {
         const body = await response.json();
         if (!response.ok)
           throw new Error(body.error || "Could not load times.");
-        setSlots((body.slots as string[]).map((value) => new Date(value)));
-        setSlotLimit(16);
+        if (active) {
+          setDays(body.days as BookingCalendarDay[]);
+          setEarliestMonth(body.earliestMonth as string);
+          setLatestMonth(body.latestMonth as string);
+        }
       })
-      .catch((value) =>
-        setError(
-          value instanceof Error ? value.message : "Could not load times.",
-        ),
-      )
-      .finally(() => setLoading(false));
-  }, [coachId, data.demo, experienceId, offer.id]);
-  function chooseCoach(id: string) {
-    setCoachId(id);
+      .catch((value) => {
+        if (value instanceof DOMException && value.name === "AbortError") return;
+        if (active) {
+          setError(
+            value instanceof Error ? value.message : "Could not load times.",
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [data.demo, experienceId, month, offer.id]);
+  function changeMonth(nextMonth: string) {
+    setMonth(nextMonth);
+    setSelectedDate("");
     setSlot("");
-    setSlots([]);
-    setSlotLimit(16);
     setError("");
-    if (!data.demo) setLoading(true);
+    if (data.demo) {
+      setDays(previewDays.filter((day) => day.date.startsWith(nextMonth)));
+    } else {
+      setLoading(true);
+    }
   }
   async function submit() {
     setSaving(true);
@@ -696,9 +765,8 @@ function BookingFlow({
             experienceId,
             companyId: data.companyId,
             offerId: offer.id,
-            coachId: coachId || null,
             startsAt: slot,
-            timezone: data.settings.default_timezone,
+            timezone,
             intakeAnswers: { goal },
             memberNote: note,
           }),
@@ -735,13 +803,11 @@ function BookingFlow({
         </div>
       </div>
     );
-  const coachOptions = eligible.map((coach) => ({
-    value: coach.id,
-    label: coach.name,
-  }));
   return (
     <div className="modal-backdrop">
-      <section className="booking-modal sc-card">
+      <section
+        className={`booking-modal sc-card ${step === 1 ? "calendar-booking-modal" : ""}`}
+      >
         <header className="booking-modal-head">
           <button
             className="icon-button"
@@ -760,55 +826,26 @@ function BookingFlow({
           <div className="flow-content">
             <p className="eyebrow">Choose a time</p>
             <h2>{offer.title}</h2>
-            {eligible.length > 1 && (
-              <div className="field coach-choice">
-                <label>Preferred coach</label>
-                <CustomSelect
-                  value={coachId}
-                  options={coachOptions}
-                  onChange={chooseCoach}
-                />
+            <BookingCalendar
+              month={month}
+              earliestMonth={earliestMonth}
+              latestMonth={latestMonth}
+              days={days}
+              timezone={timezone}
+              selectedDate={selectedDate}
+              selectedSlot={slot}
+              loading={loading}
+              onMonthChange={changeMonth}
+              onDateChange={(date) => {
+                setSelectedDate(date);
+                setSlot("");
+              }}
+              onSlotChange={setSlot}
+            />
+            {!loading && days.length === 0 && !error && (
+              <div className="notice calendar-notice">
+                No request times are open in this month.
               </div>
-            )}
-            {loading ? (
-              <div className="notice">Loading available times…</div>
-            ) : slots.length === 0 ? (
-              <div className="notice">No request times are open right now.</div>
-            ) : (
-              <div className="slot-list">
-                {slots.slice(0, slotLimit).map((date) => (
-                  <button
-                    key={date.toISOString()}
-                    className={slot === date.toISOString() ? "active" : ""}
-                    onClick={() => setSlot(date.toISOString())}
-                  >
-                    <span>
-                      {new Intl.DateTimeFormat("en-US", {
-                        weekday: "short",
-                        month: "short",
-                        day: "numeric",
-                        timeZone: data.settings.default_timezone,
-                      }).format(date)}
-                    </span>
-                    <strong>
-                      {new Intl.DateTimeFormat("en-US", {
-                        hour: "numeric",
-                        minute: "2-digit",
-                        timeZone: data.settings.default_timezone,
-                      }).format(date)}
-                    </strong>
-                  </button>
-                ))}
-              </div>
-            )}
-            {slots.length > slotLimit && !loading && (
-              <button
-                type="button"
-                className="show-more-times"
-                onClick={() => setSlotLimit((value) => value + 16)}
-              >
-                Show more times
-              </button>
             )}
             {error && <p className="form-error">{error}</p>}
             <button

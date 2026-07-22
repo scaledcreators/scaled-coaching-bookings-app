@@ -8,6 +8,10 @@ A Whop-native, manual-first coaching bookings app. Creators manage offers, avail
 - Whop experience view at `/experiences/[experienceId]`, with server-verified member access
 - Premium admin operations UI, member storefront, three-step request flow, and My Bookings
 - Emergency pause and full-day/multi-day unavailable windows
+- Month-grid customer calendar with date-specific time choices and navigation
+- Single-coach profile and availability model without roster or assignment UI
+- Default daily booking capacity plus per-date capacity overrides
+- One reserving booking per member per local calendar day
 - Server-side blackout, booking, hold, notice-window, and advance-window validation
 - Transaction-scoped slot lock to prevent two concurrent requests from claiming the same slot
 - Request-first approval flow with an up-to-24-hour Whop payment window for approved paid offers
@@ -20,7 +24,7 @@ A Whop-native, manual-first coaching bookings app. Creators manage offers, avail
 1. Create a Supabase project.
 2. Run `supabase/migrations/202607210001_initial_schema.sql` in the SQL editor (or use the Supabase CLI migration flow).
    If the initial schema was installed before the service-role grant fix, also run `supabase/migrations/202607210002_service_role_privileges.sql`.
-   Then run the later migrations in filename order, including `202607220002_request_then_pay_on_approval.sql`. This migration enables Supabase Cron so overdue payment windows are expired every minute.
+   Then run the later migrations in filename order, including `202607220002_request_then_pay_on_approval.sql` and `202607220003_single_coach_daily_capacity.sql`. These migrations enable Supabase Cron for overdue payment windows and add the single-coach daily-capacity rules.
 3. Copy `.env.example` to `.env.local` and add the project URL, anon key, and service-role key.
 4. No Whop experience or company IDs need to be seeded. On first authenticated experience access, the server retrieves the experience from Whop, verifies that it belongs to this app, and caches its company relationship in `experience_installations`.
 

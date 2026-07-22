@@ -1,196 +1,130 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Pencil, Plus, Trash2, UserRound, X } from "lucide-react";
-import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Pencil, UserRound, X } from "lucide-react";
 import { OverlayPortal } from "@/components/overlay-portal";
 import type { Coach } from "@/lib/types";
-
-const empty = { name: "", bio: "", timezone: "America/Chicago" };
 
 export function CoachManager({
   companyId,
   demo,
-  initialCoaches,
-  onCoachesChange,
+  initialCoach,
+  onCoachChange,
 }: {
   companyId: string;
   demo: boolean;
-  initialCoaches: Coach[];
-  onCoachesChange?: (coaches: Coach[]) => void;
+  initialCoach: Coach | null;
+  onCoachChange?: (coach: Coach) => void;
 }) {
-  const [coaches, setCoaches] = useState(initialCoaches);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [coach, setCoach] = useState(initialCoach);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(empty);
+  const [form, setForm] = useState({
+    name: initialCoach?.name ?? "",
+    bio: initialCoach?.bio ?? "",
+    timezone: initialCoach?.timezone ?? "America/Chicago",
+  });
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-  const [pendingArchive, setPendingArchive] = useState<Coach | null>(null);
-  const [archiving, setArchiving] = useState(false);
 
   useEffect(() => {
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape" && open && !saving) setOpen(false);
     }
-
     window.addEventListener("keydown", closeOnEscape);
     return () => window.removeEventListener("keydown", closeOnEscape);
   }, [open, saving]);
 
-  function edit(coach?: Coach) {
-    setEditingId(coach?.id ?? null);
-    setForm(
-      coach
-        ? { name: coach.name, bio: coach.bio ?? "", timezone: coach.timezone }
-        : empty,
-    );
+  function edit() {
+    if (!coach) return;
+    setForm({
+      name: coach.name,
+      bio: coach.bio ?? "",
+      timezone: coach.timezone,
+    });
     setError("");
     setOpen(true);
   }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (!coach) return;
     setSaving(true);
     setError("");
-
     try {
-      let coach: Coach;
-
+      let updated: Coach;
       if (demo) {
-        coach = {
-          id: editingId ?? crypto.randomUUID(),
-          whop_company_id: companyId,
-          ...form,
-          status: "active",
-        };
+        updated = { ...coach, ...form, bio: form.bio || null };
       } else {
-        const response = await fetch(
-          editingId ? `/api/coaches/${editingId}` : "/api/coaches",
-          {
-            method: editingId ? "PATCH" : "POST",
-            headers: { "content-type": "application/json" },
-            body: JSON.stringify({ companyId, ...form }),
-          },
-        );
+        const response = await fetch(`/api/coaches/${coach.id}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ companyId, ...form }),
+        });
         const payload = await response.json();
         if (!response.ok) throw new Error(payload.error);
-        coach = payload.coach;
+        updated = payload.coach;
       }
-
-      setCoaches((items) => {
-        const next = editingId
-          ? items.map((item) => (item.id === editingId ? coach : item))
-          : [...items, coach];
-        onCoachesChange?.(next);
-        return next;
-      });
+      setCoach(updated);
+      onCoachChange?.(updated);
       setOpen(false);
     } catch (reason) {
       setError(
-        reason instanceof Error ? reason.message : "Could not save coach.",
+        reason instanceof Error ? reason.message : "Could not save profile.",
       );
     } finally {
       setSaving(false);
     }
   }
 
-  async function archive() {
-    if (!pendingArchive) return;
-    setArchiving(true);
-    setError("");
-
-    try {
-      if (!demo) {
-        const response = await fetch(
-          `/api/coaches/${pendingArchive.id}?companyId=${encodeURIComponent(companyId)}`,
-          { method: "DELETE" },
-        );
-        if (!response.ok) {
-          const payload = await response.json();
-          throw new Error(payload.error || "Could not archive coach.");
-        }
-      }
-
-      setCoaches((items) => {
-        const next = items.filter((item) => item.id !== pendingArchive.id);
-        onCoachesChange?.(next);
-        return next;
-      });
-      setPendingArchive(null);
-    } catch (reason) {
-      setError(
-        reason instanceof Error ? reason.message : "Could not archive coach.",
-      );
-    } finally {
-      setArchiving(false);
-    }
-  }
-
   return (
     <div className="content-stack fade-in">
-      <section className="unavailable-hero">
+      <header className="section-page-heading">
         <div>
-          <p className="eyebrow">Your team</p>
-          <h2>Coaches & assignment</h2>
+          <p className="eyebrow">Session host</p>
+          <h2>Coach profile</h2>
           <p>
-            Manage the people who deliver sessions. Each coach receives their own
-            weekly availability.
+            This is the single coach customers see and the owner used for all
+            availability, capacity, and bookings.
           </p>
         </div>
-        <button type="button" className="sc-btn-primary" onClick={() => edit()}>
-          <Plus size={16} /> Add coach
-        </button>
-      </section>
+      </header>
 
-      {error && !open && <p className="form-error action-error">{error}</p>}
-
-      <div className="coach-grid">
-        {coaches.length === 0 && (
-          <div className="panel coach-empty">
-            <UserRound />
-            <strong>No active coaches yet</strong>
+      {!coach ? (
+        <section className="panel coach-profile-empty">
+          <UserRound size={28} />
+          <div>
+            <strong>No active coach profile</strong>
             <p>
-              Add the person who will deliver sessions, then set their weekly
-              availability.
+              The installation needs one coach profile before it can accept
+              requests. Multiple coach rosters are not supported.
             </p>
-            <button
-              type="button"
-              className="sc-btn-primary"
-              onClick={() => edit()}
-            >
-              <Plus size={16} /> Add first coach
-            </button>
           </div>
-        )}
+        </section>
+      ) : (
+        <section className="panel single-coach-profile">
+          <span
+            className={`coach-avatar single ${coach.avatar_url ? "has-photo" : ""}`}
+            style={
+              coach.avatar_url
+                ? { backgroundImage: `url(${JSON.stringify(coach.avatar_url).slice(1, -1)})` }
+                : undefined
+            }
+          >
+            {!coach.avatar_url && <UserRound />}
+          </span>
+          <div className="single-coach-copy">
+            <span className="health-badge success">Active</span>
+            <h3>{coach.name}</h3>
+            <p>{coach.bio || "Add a short bio or specialty."}</p>
+            <small>{coach.timezone}</small>
+          </div>
+          <button type="button" className="sc-btn-secondary" onClick={edit}>
+            <Pencil size={15} /> Edit profile
+          </button>
+        </section>
+      )}
 
-        {coaches.map((coach) => (
-          <article className="coach-card panel" key={coach.id}>
-            <span className="coach-avatar">
-              <UserRound />
-            </span>
-            <div>
-              <span className="health-badge success">Active</span>
-              <h3>{coach.name}</h3>
-              <p>{coach.bio || "No bio yet."}</p>
-              <small>{coach.timezone}</small>
-              <div className="manage-actions">
-                <button type="button" onClick={() => edit(coach)}>
-                  <Pencil size={14} /> Edit
-                </button>
-                <button
-                  type="button"
-                  className="danger-link"
-                  onClick={() => setPendingArchive(coach)}
-                >
-                  <Trash2 size={14} /> Archive
-                </button>
-              </div>
-            </div>
-          </article>
-        ))}
-      </div>
-
-      {open && (
+      {open && coach && (
         <OverlayPortal>
           <div
             className="modal-backdrop"
@@ -207,10 +141,8 @@ export function CoachManager({
             >
               <div className="panel-heading">
                 <div>
-                  <p className="eyebrow">Team member</p>
-                  <h2 id="coach-dialog-title">
-                    {editingId ? "Edit coach" : "Add a coach"}
-                  </h2>
+                  <p className="eyebrow">Public profile</p>
+                  <h2 id="coach-dialog-title">Edit coach profile</h2>
                 </div>
                 <button
                   type="button"
@@ -222,7 +154,6 @@ export function CoachManager({
                   <X size={18} />
                 </button>
               </div>
-
               <div className="field">
                 <label htmlFor="coach-name">Name</label>
                 <input
@@ -256,9 +187,7 @@ export function CoachManager({
                   required
                 />
               </div>
-
               {error && <p className="form-error">{error}</p>}
-
               <div className="modal-actions">
                 <button
                   type="button"
@@ -269,23 +198,12 @@ export function CoachManager({
                   Cancel
                 </button>
                 <button className="sc-btn-primary" disabled={saving}>
-                  {saving ? "Saving…" : "Save coach"}
+                  {saving ? "Saving…" : "Save profile"}
                 </button>
               </div>
             </form>
           </div>
         </OverlayPortal>
-      )}
-
-      {pendingArchive && (
-        <ConfirmDialog
-          title={`Archive ${pendingArchive.name}?`}
-          description="The coach will no longer be available for new assignments. Existing booking history stays intact."
-          confirmLabel="Archive coach"
-          busy={archiving}
-          onClose={() => setPendingArchive(null)}
-          onConfirm={archive}
-        />
       )}
     </div>
   );

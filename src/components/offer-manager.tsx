@@ -1,8 +1,7 @@
 "use client";
 import { useState } from "react";
-import { Clock3, Pencil, Plus, Trash2, Users, X } from "lucide-react";
-import type { Coach, Offer } from "@/lib/types";
-import { CustomCheckbox } from "@/components/custom-checkbox";
+import { Clock3, Pencil, Plus, Trash2, UserRound, X } from "lucide-react";
+import type { Offer } from "@/lib/types";
 import { CustomSelect } from "@/components/custom-select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
@@ -13,7 +12,6 @@ const emptyForm = {
   pricing: "free" as "free" | "paid",
   amount: "",
   status: "published" as "published" | "draft",
-  coachIds: [] as string[],
   minNoticeHours: 24,
   maxAdvanceDays: 60,
   bufferBeforeMinutes: 0,
@@ -23,13 +21,11 @@ export function OfferManager({
   companyId,
   demo,
   initialOffers,
-  coaches,
   onOffersChange,
 }: {
   companyId: string;
   demo: boolean;
   initialOffers: Offer[];
-  coaches: Coach[];
   onOffersChange?: (offers: Offer[]) => void;
 }) {
   const [offers, setOffers] = useState(initialOffers);
@@ -54,7 +50,6 @@ export function OfferManager({
       pricing: offer.price_cents ? "paid" : "free",
       amount: offer.price_cents ? String(offer.price_cents / 100) : "",
       status: offer.status === "draft" ? "draft" : "published",
-      coachIds: offer.coach_ids ?? [],
       minNoticeHours: offer.min_notice_hours,
       maxAdvanceDays: offer.max_advance_days,
       bufferBeforeMinutes: offer.buffer_before_minutes,
@@ -76,7 +71,6 @@ export function OfferManager({
         priceCents:
           form.pricing === "paid" ? Math.round(Number(form.amount) * 100) : 0,
         status: form.status,
-        coachIds: form.coachIds,
         minNoticeHours: form.minNoticeHours,
         maxAdvanceDays: form.maxAdvanceDays,
         bufferBeforeMinutes: form.bufferBeforeMinutes,
@@ -102,7 +96,6 @@ export function OfferManager({
           buffer_before_minutes: form.bufferBeforeMinutes,
           buffer_after_minutes: form.bufferAfterMinutes,
           capacity_per_slot: 1,
-          coach_ids: form.coachIds,
         };
       else {
         const response = await fetch(
@@ -169,26 +162,14 @@ export function OfferManager({
           <p className="eyebrow">Products & payments</p>
           <h2>Coaching offers</h2>
           <p>
-            Create the sessions customers can request, with pricing and coach
-            eligibility built in.
+            Create the sessions customers can request, with pricing and booking
+            rules for your coaching calendar.
           </p>
         </div>
         <button className="sc-btn-primary" onClick={create}>
           <Plus size={16} /> New offer
         </button>
       </header>
-      {coaches.length === 0 && (
-        <div className="setup-guidance">
-          <Users size={18} />
-          <div>
-            <strong>Add a coach before publishing</strong>
-            <p>
-              Offers need an active coach and saved availability before
-              customers can choose a valid time.
-            </p>
-          </div>
-        </div>
-      )}
       <section className="panel offers-management">
         <div className="offers-list-heading">
           <span>Offer</span>
@@ -222,10 +203,8 @@ export function OfferManager({
                 {offer.duration_minutes} minutes
               </span>
               <span>
-                <Users size={14} />
-                {offer.coach_ids?.length
-                  ? `${offer.coach_ids.length} assigned`
-                  : "Any coach"}
+                <UserRound size={14} />
+                Single coach
               </span>
             </div>
             <strong className="offer-list-price">
@@ -431,30 +410,6 @@ export function OfferManager({
                     }
                   />
                 </div>
-              </div>
-            </section>
-            <section className="form-section">
-              <div className="form-section-heading">
-                <strong>Eligible coaches</strong>
-                <span>Leave every coach unchecked to allow anyone active.</span>
-              </div>
-              <div className="coach-checkbox-grid">
-                {coaches.map((coach) => (
-                  <CustomCheckbox
-                    key={coach.id}
-                    checked={form.coachIds.includes(coach.id)}
-                    onChange={(checked) =>
-                      setForm({
-                        ...form,
-                        coachIds: checked
-                          ? [...form.coachIds, coach.id]
-                          : form.coachIds.filter((id) => id !== coach.id),
-                      })
-                    }
-                    label={coach.name}
-                    description={coach.bio ?? coach.timezone}
-                  />
-                ))}
               </div>
             </section>
             {error && <p className="form-error">{error}</p>}

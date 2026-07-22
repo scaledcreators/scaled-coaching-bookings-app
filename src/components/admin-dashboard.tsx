@@ -14,6 +14,7 @@ import {
   Plus,
   Power,
   Settings,
+  UserRound,
   Users,
   X,
 } from "lucide-react";
@@ -23,7 +24,6 @@ import { CoachManager } from "@/components/coach-manager";
 import { AvailabilityManager } from "@/components/availability-manager";
 import { CustomersView } from "@/components/customers-view";
 import { SettingsManager } from "@/components/settings-manager";
-import { CustomSelect } from "@/components/custom-select";
 import { CustomDateRangePicker } from "@/components/custom-date-range-picker";
 import { bookingMemberInitial, bookingMemberLabel } from "@/lib/member";
 import {
@@ -47,7 +47,6 @@ type Section =
   | "settings";
 type BookingChanges = {
   status?: Booking["status"];
-  coachId?: string | null;
   requestedStartAt?: string;
   meetingLocation?: string;
   meetingUrl?: string;
@@ -61,7 +60,7 @@ const nav: { key: Section; label: string; icon: typeof LayoutDashboard }[] = [
   { key: "offers", label: "Offers", icon: CircleDollarSign },
   { key: "availability", label: "Availability", icon: Clock3 },
   { key: "unavailable", label: "Unavailable", icon: Ban },
-  { key: "coaches", label: "Coaches", icon: Users },
+  { key: "coaches", label: "Coach", icon: UserRound },
   { key: "customers", label: "Customers", icon: Users },
   { key: "settings", label: "Settings", icon: Settings },
 ];
@@ -125,9 +124,6 @@ function AdminDashboardContent({
           ? {
               ...item,
               ...(changes.status ? { status: changes.status } : {}),
-              ...(changes.coachId !== undefined
-                ? { coach_id: changes.coachId }
-                : {}),
             }
           : item,
       ),
@@ -172,7 +168,6 @@ function AdminDashboardContent({
   async function decideBooking(
     id: string,
     action: "approve" | "reject",
-    coachId?: string | null,
   ) {
     const previous = bookings;
     const current = bookings.find((booking) => booking.id === id);
@@ -190,7 +185,6 @@ function AdminDashboardContent({
           item.id === id
             ? {
                 ...item,
-                coach_id: coachId ?? item.coach_id,
                 status:
                   action === "reject"
                     ? "rejected"
@@ -221,7 +215,6 @@ function AdminDashboardContent({
       body: JSON.stringify({
         companyId: initialData.companyId,
         action,
-        coachId,
       }),
     });
     const body = await response.json();
@@ -372,7 +365,6 @@ function AdminDashboardContent({
         {section === "bookings" && (
           <BookingsBoard
             bookings={bookings}
-            coaches={coaches}
             error={actionError}
             onUpdate={updateBooking}
             onDecision={decideBooking}
@@ -384,7 +376,6 @@ function AdminDashboardContent({
             companyId={initialData.companyId}
             demo={initialData.demo}
             initialOffers={offers}
-            coaches={coaches}
             onOffersChange={setOffers}
           />
         )}
@@ -392,9 +383,11 @@ function AdminDashboardContent({
           <AvailabilityManager
             companyId={initialData.companyId}
             demo={initialData.demo}
-            coaches={coaches}
+            coach={coaches.find((coach) => coach.status === "active") ?? null}
             initialRules={availability}
             timezone={tenantSettings.default_timezone}
+            defaultDailyCapacity={tenantSettings.default_daily_capacity}
+            initialCapacityOverrides={initialData.capacityOverrides}
             onAddBlackout={() => setBlackoutOpen(true)}
             onRulesChange={setAvailability}
           />
@@ -414,8 +407,10 @@ function AdminDashboardContent({
           <CoachManager
             companyId={initialData.companyId}
             demo={initialData.demo}
-            initialCoaches={coaches}
-            onCoachesChange={setCoaches}
+            initialCoach={
+              coaches.find((coach) => coach.status === "active") ?? null
+            }
+            onCoachChange={(coach) => setCoaches([coach])}
           />
         )}
         {section === "customers" && <CustomersView bookings={bookings} />}
@@ -575,20 +570,17 @@ function Overview({
 
 function BookingsBoard({
   bookings,
-  coaches,
   error,
   onUpdate,
   onDecision,
   onRefund,
 }: {
   bookings: Booking[];
-  coaches: DashboardData["coaches"];
   error: string;
   onUpdate: (id: string, changes: BookingChanges) => void;
   onDecision: (
     id: string,
     action: "approve" | "reject",
-    coachId?: string | null,
   ) => void;
   onRefund: (id: string) => void;
 }) {
@@ -621,10 +613,6 @@ function BookingsBoard({
     },
   ];
   const selected = bookings.find((booking) => booking.id === selectedId);
-  const coachOptions = [
-    { value: "", label: "Unassigned" },
-    ...coaches.map((coach) => ({ value: coach.id, label: coach.name })),
-  ];
   return (
     <div className="content-stack fade-in">
       <div className="section-intro">
@@ -676,26 +664,6 @@ function BookingsBoard({
                   </span>
                   <span>{bookingMemberLabel(booking)}</span>
                 </div>
-                {column.title !== "Refunds" &&
-                  ![
-                    "rejected",
-                    "expired",
-                    "cancelled",
-                    "completed",
-                    "no_show",
-                  ].includes(booking.status) && (
-                  <div className="ticket-select">
-                    <span>Coach</span>
-                    <CustomSelect
-                      value={booking.coach_id ?? ""}
-                      options={coachOptions}
-                      onChange={(value) =>
-                        onUpdate(booking.id, { coachId: value || null })
-                      }
-                      ariaLabel="Assigned coach"
-                    />
-                  </div>
-                )}
                 <button
                   className="ticket-details"
                   onClick={() => setSelectedId(booking.id)}
@@ -708,9 +676,7 @@ function BookingsBoard({
                   <div className="ticket-actions">
                     <button
                       className="confirm-button"
-                      onClick={() =>
-                        onDecision(booking.id, "approve", booking.coach_id)
-                      }
+                      onClick={() => onDecision(booking.id, "approve")}
                     >
                       <Check size={15} /> Approve
                     </button>
@@ -761,7 +727,6 @@ function BookingsBoard({
       {selected && (
         <BookingDetail
           booking={selected}
-          coaches={coaches}
           onClose={() => setSelectedId(null)}
           onUpdate={onUpdate}
         />
@@ -772,27 +737,20 @@ function BookingsBoard({
 
 function BookingDetail({
   booking,
-  coaches,
   onClose,
   onUpdate,
 }: {
   booking: Booking;
-  coaches: DashboardData["coaches"];
   onClose: () => void;
   onUpdate: (id: string, changes: BookingChanges) => void;
 }) {
   const [form, setForm] = useState({
-    coachId: booking.coach_id ?? "",
     meetingLocation: booking.meeting_location ?? "",
     meetingUrl: booking.meeting_url ?? "",
     joinInstructions: booking.manual_join_instructions ?? "",
     adminNote: booking.admin_note ?? "",
     proposedTime: "",
   });
-  const coachOptions = [
-    { value: "", label: "Unassigned" },
-    ...coaches.map((coach) => ({ value: coach.id, label: coach.name })),
-  ];
   return (
     <div className="modal-backdrop">
       <form
@@ -800,7 +758,6 @@ function BookingDetail({
         onSubmit={(event) => {
           event.preventDefault();
           onUpdate(booking.id, {
-            coachId: form.coachId || null,
             meetingLocation: form.meetingLocation,
             meetingUrl: form.meetingUrl,
             joinInstructions: form.joinInstructions,
@@ -828,16 +785,7 @@ function BookingDetail({
             <X size={18} />
           </button>
         </div>
-        <div className="form-grid">
-          <div className="field">
-            <label>Assigned coach</label>
-            <CustomSelect
-              value={form.coachId}
-              options={coachOptions}
-              onChange={(value) => setForm({ ...form, coachId: value })}
-            />
-          </div>
-          <div className="field">
+        <div className="field">
             <label>Propose another time</label>
             <input
               type="datetime-local"
@@ -846,7 +794,6 @@ function BookingDetail({
                 setForm({ ...form, proposedTime: event.target.value })
               }
             />
-          </div>
         </div>
         <div className="form-grid">
           <div className="field">

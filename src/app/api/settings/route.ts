@@ -46,7 +46,9 @@ export async function POST(request: Request) {
         support_contact: input.supportContact || null,
         updated_at: new Date().toISOString(),
       })
-      .select("emergency_paused,default_timezone,support_contact")
+      .select(
+        "emergency_paused,default_timezone,default_daily_capacity,support_contact",
+      )
       .single();
     if (error) throw error;
 

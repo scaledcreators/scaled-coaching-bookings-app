@@ -380,7 +380,7 @@ export function SettingsManager({
                 placeholder="Choose a timezone"
               />
               <small className="field-help">
-                Individual coaches can still keep their own timezone.
+                This timezone is shared by the coach calendar and customers.
               </small>
             </div>
           </div>
