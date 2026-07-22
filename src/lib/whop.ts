@@ -9,7 +9,11 @@ export const whop = new Whop({
   // credential-free preview builds working; every live call is gated above.
   apiKey: process.env.WHOP_API_KEY || "missing_whop_api_key",
   appID: process.env.NEXT_PUBLIC_WHOP_APP_ID,
-  webhookKey: process.env.WHOP_WEBHOOK_SECRET,
+  // Whop displays the raw ws_ secret, while the Standard Webhooks verifier
+  // used by the SDK expects that secret encoded as Base64.
+  webhookKey: process.env.WHOP_WEBHOOK_SECRET
+    ? btoa(process.env.WHOP_WEBHOOK_SECRET)
+    : undefined,
   version: process.env.WHOP_API_VERSION_DATE || undefined,
   baseURL: process.env.WHOP_API_BASE_URL || undefined,
 });
