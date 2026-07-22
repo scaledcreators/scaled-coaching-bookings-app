@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { requireRequestViewer } from "@/lib/auth";
+import { getApplicableAvailabilityRules } from "@/lib/availability-server";
+import { slotFitsAvailability } from "@/lib/availability-time";
 import { companyIdForExperience } from "@/lib/data";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { whop } from "@/lib/whop";
@@ -36,7 +38,11 @@ export async function POST(request: Request) {
     const earliest = Date.now() + offer.min_notice_hours * 3_600_000;
     const latest = Date.now() + offer.max_advance_days * 86_400_000;
     if (startsAt.getTime() < earliest || startsAt.getTime() > latest) return Response.json({ error: "That time is outside this offer’s booking window." }, { status: 409 });
-    const { data: blocked, error: blockedError } = await supabase.rpc("is_booking_slot_blocked", { p_company_id: input.companyId, p_offer_id: input.offerId, p_coach_id: input.coachId ?? null, p_starts_at: startsAt.toISOString(), p_ends_at: endsAt.toISOString(), p_ignore_booking_id: null });
+    const rules = await getApplicableAvailabilityRules(supabase, input.companyId, input.offerId, input.coachId ?? null);
+    if (!slotFitsAvailability(startsAt, endsAt, rules)) return Response.json({ error: "That time is outside the coach’s available hours." }, { status: 409 });
+    const blockedStartsAt = new Date(startsAt.getTime() - offer.buffer_before_minutes * 60_000);
+    const blockedEndsAt = new Date(endsAt.getTime() + offer.buffer_after_minutes * 60_000);
+    const { data: blocked, error: blockedError } = await supabase.rpc("is_booking_slot_blocked", { p_company_id: input.companyId, p_offer_id: input.offerId, p_coach_id: input.coachId ?? null, p_starts_at: blockedStartsAt.toISOString(), p_ends_at: blockedEndsAt.toISOString(), p_ignore_booking_id: null });
     if (blockedError) throw blockedError;
     if (blocked) return Response.json({ error: "That time was just taken or is unavailable. Choose another time." }, { status: 409 });
 

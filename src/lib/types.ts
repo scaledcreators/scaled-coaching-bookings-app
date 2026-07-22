@@ -45,6 +45,7 @@ export type Booking = {
   whop_refund_id?: string | null;
   created_at: string;
   booking_offers?: Pick<Offer, "title" | "duration_minutes"> | null;
+  member_profile?: { name: string | null; username: string | null } | null;
 };
 
 export type UnavailableWindow = {

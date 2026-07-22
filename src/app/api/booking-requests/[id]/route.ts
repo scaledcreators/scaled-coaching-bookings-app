@@ -1,5 +1,7 @@
 import { z } from "zod";
 import { requireRequestViewer } from "@/lib/auth";
+import { getApplicableAvailabilityRules } from "@/lib/availability-server";
+import { slotFitsAvailability } from "@/lib/availability-time";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
 const statuses = ["requested", "confirmed", "declined", "reschedule_requested", "cancelled", "completed", "no_show"] as const;
@@ -41,10 +43,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     if (input.adminNote !== undefined) update.admin_note = input.adminNote || null;
     if (input.refundStatus !== undefined) update.refund_status = input.refundStatus;
     if (input.requestedStartAt !== undefined) {
-      const { data: offer, error: offerError } = await supabase.from("booking_offers").select("duration_minutes,min_notice_hours,max_advance_days").eq("id", existing.data.offer_id).eq("whop_company_id", input.companyId).single();
+      const { data: offer, error: offerError } = await supabase.from("booking_offers").select("duration_minutes,min_notice_hours,max_advance_days,buffer_before_minutes,buffer_after_minutes").eq("id", existing.data.offer_id).eq("whop_company_id", input.companyId).single();
       if (offerError || !offer) throw new Error("Offer not found.");
       const start = new Date(input.requestedStartAt); const end = new Date(start.getTime() + offer.duration_minutes * 60_000);
-      const { data: blocked, error: blockedError } = await supabase.rpc("is_booking_slot_blocked", { p_company_id: input.companyId, p_offer_id: existing.data.offer_id, p_coach_id: input.coachId ?? existing.data.coach_id, p_starts_at: start.toISOString(), p_ends_at: end.toISOString(), p_ignore_booking_id: id });
+      const targetCoachId = input.coachId ?? existing.data.coach_id;
+      const rules = await getApplicableAvailabilityRules(supabase, input.companyId, existing.data.offer_id, targetCoachId);
+      if (!slotFitsAvailability(start, end, rules)) return Response.json({ error: "That proposed time is outside the coach’s available hours." }, { status: 409 });
+      const { data: blocked, error: blockedError } = await supabase.rpc("is_booking_slot_blocked", { p_company_id: input.companyId, p_offer_id: existing.data.offer_id, p_coach_id: targetCoachId, p_starts_at: new Date(start.getTime() - offer.buffer_before_minutes * 60_000).toISOString(), p_ends_at: new Date(end.getTime() + offer.buffer_after_minutes * 60_000).toISOString(), p_ignore_booking_id: id });
       if (blockedError) throw blockedError; if (blocked) return Response.json({ error: "That proposed time is unavailable." }, { status: 409 });
       update.requested_start_at = start.toISOString(); update.requested_end_at = end.toISOString(); update.confirmed_start_at = null; update.confirmed_end_at = null; update.status = input.status ?? "reschedule_requested";
     }
