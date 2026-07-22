@@ -25,6 +25,7 @@ import { AvailabilityManager } from "@/components/availability-manager";
 import { CustomersView } from "@/components/customers-view";
 import { SettingsManager } from "@/components/settings-manager";
 import { CustomDateRangePicker } from "@/components/custom-date-range-picker";
+import { OverlayPortal } from "@/components/overlay-portal";
 import { bookingMemberInitial, bookingMemberLabel } from "@/lib/member";
 import {
   bookingStatusLabel,
@@ -752,6 +753,7 @@ function BookingDetail({
     proposedTime: "",
   });
   return (
+    <OverlayPortal>
     <div className="modal-backdrop">
       <form
         className="modal booking-detail-modal sc-card"
@@ -868,6 +870,7 @@ function BookingDetail({
         </div>
       </form>
     </div>
+    </OverlayPortal>
   );
 }
 
@@ -1018,6 +1021,7 @@ function BlackoutModal({
     }
   }
   return (
+    <OverlayPortal>
     <div className="modal-backdrop">
       <form className="modal sc-card" onSubmit={submit}>
         <div className="panel-heading">
@@ -1066,5 +1070,6 @@ function BlackoutModal({
         </div>
       </form>
     </div>
+    </OverlayPortal>
   );
 }

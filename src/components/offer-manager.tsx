@@ -4,6 +4,7 @@ import { Clock3, Pencil, Plus, Trash2, UserRound, X } from "lucide-react";
 import type { Offer } from "@/lib/types";
 import { CustomSelect } from "@/components/custom-select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { OverlayPortal } from "@/components/overlay-portal";
 
 const emptyForm = {
   title: "",
@@ -234,6 +235,7 @@ export function OfferManager({
         ))}
       </section>
       {open && (
+        <OverlayPortal>
         <div className="modal-backdrop">
           <form className="modal sc-card offer-modal" onSubmit={submit}>
             <div className="panel-heading">
@@ -427,6 +429,7 @@ export function OfferManager({
             </div>
           </form>
         </div>
+        </OverlayPortal>
       )}
       {pendingArchive && (
         <ConfirmDialog
