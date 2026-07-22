@@ -175,3 +175,24 @@ alter table public.booking_settings enable row level security;
 
 revoke all on function public.is_booking_slot_blocked(text,uuid,uuid,timestamptz,timestamptz,uuid) from public, anon, authenticated;
 revoke all on function public.create_booking_request_atomic(text,text,uuid,uuid,text,timestamptz,timestamptz,text,jsonb,text) from public, anon, authenticated;
+
+-- The app accesses booking data only from authenticated server routes using
+-- Supabase's service role. RLS remains enabled and browser roles receive no
+-- policies, while the service role gets the explicit SQL privileges it needs.
+grant usage on schema public to service_role;
+grant select, insert, update, delete on table
+  public.booking_offers,
+  public.coaches,
+  public.offer_coaches,
+  public.availability_rules,
+  public.unavailable_windows,
+  public.booking_requests,
+  public.booking_holds,
+  public.booking_entitlements,
+  public.booking_messages,
+  public.webhook_events,
+  public.experience_installations,
+  public.booking_settings
+to service_role;
+grant execute on function public.is_booking_slot_blocked(text,uuid,uuid,timestamptz,timestamptz,uuid) to service_role;
+grant execute on function public.create_booking_request_atomic(text,text,uuid,uuid,text,timestamptz,timestamptz,text,jsonb,text) to service_role;

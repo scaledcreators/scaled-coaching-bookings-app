@@ -19,6 +19,7 @@ A Whop-native, manual-first coaching bookings app. Creators manage offers, avail
 
 1. Create a Supabase project.
 2. Run `supabase/migrations/202607210001_initial_schema.sql` in the SQL editor (or use the Supabase CLI migration flow).
+   If the initial schema was installed before the service-role grant fix, also run `supabase/migrations/202607210002_service_role_privileges.sql`.
 3. Copy `.env.example` to `.env.local` and add the project URL, anon key, and service-role key.
 4. No Whop experience or company IDs need to be seeded. On first authenticated experience access, the server retrieves the experience from Whop, verifies that it belongs to this app, and caches its company relationship in `experience_installations`.
 
