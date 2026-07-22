@@ -24,6 +24,7 @@ import { AvailabilityManager } from "@/components/availability-manager";
 import { CustomersView } from "@/components/customers-view";
 import { SettingsManager } from "@/components/settings-manager";
 import { CustomSelect } from "@/components/custom-select";
+import { CustomDateRangePicker } from "@/components/custom-date-range-picker";
 import { bookingMemberInitial, bookingMemberLabel } from "@/lib/member";
 import { AppBrand } from "@/components/app-brand";
 import {
@@ -315,7 +316,7 @@ function AdminDashboardContent({
             demo={initialData.demo}
             coaches={coaches}
             initialRules={availability}
-          timezone={tenantSettings.default_timezone}
+            timezone={tenantSettings.default_timezone}
             onAddBlackout={() => setBlackoutOpen(true)}
             onRulesChange={setAvailability}
           />
@@ -344,7 +345,7 @@ function AdminDashboardContent({
           <SettingsManager
             companyId={initialData.companyId}
             demo={initialData.demo}
-          initialSettings={tenantSettings}
+            initialSettings={tenantSettings}
           />
         )}
       </section>
@@ -913,6 +914,10 @@ function BlackoutModal({
   const [saving, setSaving] = useState(false);
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (form.endsAt < form.startsAt) {
+      setError("The last unavailable day must be on or after the first day.");
+      return;
+    }
     setSaving(true);
     setError("");
     const body = {
@@ -980,29 +985,13 @@ function BlackoutModal({
             required
           />
         </div>
-        <div className="form-grid">
-          <div className="field">
-            <label>First day</label>
-            <input
-              type="date"
-              value={form.startsAt}
-              onChange={(event) =>
-                setForm({ ...form, startsAt: event.target.value })
-              }
-            />
-          </div>
-          <div className="field">
-            <label>Last day</label>
-            <input
-              type="date"
-              min={form.startsAt}
-              value={form.endsAt}
-              onChange={(event) =>
-                setForm({ ...form, endsAt: event.target.value })
-              }
-            />
-          </div>
-        </div>
+        <CustomDateRangePicker
+          startDate={form.startsAt}
+          endDate={form.endsAt}
+          onChange={(startsAt, endsAt) =>
+            setForm({ ...form, startsAt, endsAt })
+          }
+        />
         <div className="field">
           <label>Private note</label>
           <textarea
