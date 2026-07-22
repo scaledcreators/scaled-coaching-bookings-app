@@ -25,7 +25,16 @@ export type Booking = {
   whop_user_id: string;
   offer_id: string;
   coach_id: string | null;
-  status: "draft" | "pending_payment" | "requested" | "confirmed" | "declined" | "reschedule_requested" | "cancelled" | "completed" | "no_show";
+  status:
+    | "draft"
+    | "pending_payment"
+    | "requested"
+    | "confirmed"
+    | "declined"
+    | "reschedule_requested"
+    | "cancelled"
+    | "completed"
+    | "no_show";
   requested_start_at: string | null;
   requested_end_at: string | null;
   confirmed_start_at: string | null;
@@ -38,7 +47,13 @@ export type Booking = {
   meeting_url: string | null;
   manual_join_instructions: string | null;
   whop_payment_id?: string | null;
-  refund_status?: "not_requested" | "requested" | "processing" | "refunded" | "declined" | "failed";
+  refund_status?:
+    | "not_requested"
+    | "requested"
+    | "processing"
+    | "refunded"
+    | "declined"
+    | "failed";
   refund_reason?: string | null;
   refund_requested_at?: string | null;
   refunded_at?: string | null;
@@ -83,7 +98,29 @@ export type AvailabilityRule = {
   status: "active" | "disabled";
 };
 
-export type BookingSettings = {
+export type ThemeName =
+  | "Orange"
+  | "Red"
+  | "Blue"
+  | "Pink"
+  | "Violet"
+  | "Teal"
+  | "Emerald"
+  | "Indigo"
+  | "Monochrome"
+  | "Copper"
+  | "custom";
+
+export type BookingAppearance = {
+  display_name: string;
+  logo_url: string | null;
+  theme_name: ThemeName;
+  theme_primary: string;
+  theme_accent: string;
+  theme_highlight: string;
+};
+
+export type BookingSettings = BookingAppearance & {
   emergency_paused: boolean;
   default_timezone: string;
   support_contact: string | null;

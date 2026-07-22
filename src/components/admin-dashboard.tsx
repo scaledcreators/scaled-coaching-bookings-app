@@ -1,7 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Ban, CalendarDays, Check, ChevronRight, CircleDollarSign, Clock3, LayoutDashboard, Menu, Plus, Power, Settings, Users, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Ban,
+  CalendarDays,
+  Check,
+  ChevronRight,
+  CircleDollarSign,
+  Clock3,
+  LayoutDashboard,
+  Menu,
+  Plus,
+  Power,
+  Settings,
+  Users,
+  X,
+} from "lucide-react";
 import type { Booking, DashboardData, UnavailableWindow } from "@/lib/types";
 import { OfferManager } from "@/components/offer-manager";
 import { CoachManager } from "@/components/coach-manager";
@@ -10,41 +25,1003 @@ import { CustomersView } from "@/components/customers-view";
 import { SettingsManager } from "@/components/settings-manager";
 import { CustomSelect } from "@/components/custom-select";
 import { bookingMemberInitial, bookingMemberLabel } from "@/lib/member";
+import { AppBrand } from "@/components/app-brand";
+import {
+  TenantThemeProvider,
+  useTenantTheme,
+} from "@/components/tenant-theme-provider";
 
-type Section = "overview" | "bookings" | "offers" | "availability" | "unavailable" | "coaches" | "customers" | "settings";
-type BookingChanges = { status?: Booking["status"]; coachId?: string | null; requestedStartAt?: string; meetingLocation?: string; meetingUrl?: string; joinInstructions?: string; adminNote?: string; refundStatus?: "declined" };
+type Section =
+  | "overview"
+  | "bookings"
+  | "offers"
+  | "availability"
+  | "unavailable"
+  | "coaches"
+  | "customers"
+  | "settings";
+type BookingChanges = {
+  status?: Booking["status"];
+  coachId?: string | null;
+  requestedStartAt?: string;
+  meetingLocation?: string;
+  meetingUrl?: string;
+  joinInstructions?: string;
+  adminNote?: string;
+  refundStatus?: "declined";
+};
 const nav: { key: Section; label: string; icon: typeof LayoutDashboard }[] = [
-  { key: "overview", label: "Overview", icon: LayoutDashboard }, { key: "bookings", label: "Bookings", icon: CalendarDays }, { key: "offers", label: "Offers", icon: CircleDollarSign }, { key: "availability", label: "Availability", icon: Clock3 }, { key: "unavailable", label: "Unavailable", icon: Ban }, { key: "coaches", label: "Coaches", icon: Users }, { key: "customers", label: "Customers", icon: Users }, { key: "settings", label: "Settings", icon: Settings },
+  { key: "overview", label: "Overview", icon: LayoutDashboard },
+  { key: "bookings", label: "Bookings", icon: CalendarDays },
+  { key: "offers", label: "Offers", icon: CircleDollarSign },
+  { key: "availability", label: "Availability", icon: Clock3 },
+  { key: "unavailable", label: "Unavailable", icon: Ban },
+  { key: "coaches", label: "Coaches", icon: Users },
+  { key: "customers", label: "Customers", icon: Users },
+  { key: "settings", label: "Settings", icon: Settings },
 ];
-const tomorrowDate = new Date(Date.now() + 86_400_000).toISOString().slice(0, 10);
-const formatDate = (value: string | null) => value ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(value)) : "Not set";
+const tomorrowDate = new Date(Date.now() + 86_400_000)
+  .toISOString()
+  .slice(0, 10);
+const formatDate = (value: string | null) =>
+  value
+    ? new Intl.DateTimeFormat("en-US", {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+        timeZoneName: "short",
+      }).format(new Date(value))
+    : "Not set";
 
-export function AdminDashboard({ initialData }: { initialData: DashboardData }) {
-  const [section, setSection] = useState<Section>("overview"); const [mobileNav, setMobileNav] = useState(false); const [paused, setPaused] = useState(initialData.emergencyPaused); const [bookings, setBookings] = useState(initialData.bookings); const [offers, setOffers] = useState(initialData.offers); const [coaches, setCoaches] = useState(initialData.coaches); const [availability, setAvailability] = useState(initialData.availability); const [windows, setWindows] = useState(initialData.unavailable); const [blackoutOpen, setBlackoutOpen] = useState(false); const [actionError, setActionError] = useState("");
-  const pending = bookings.filter((booking) => ["requested", "reschedule_requested"].includes(booking.status)); const confirmed = bookings.filter((booking) => booking.status === "confirmed");
-  async function updateBooking(id: string, changes: BookingChanges) { const previous = bookings; setActionError(""); setBookings((items) => items.map((item) => item.id === id ? { ...item, ...(changes.status ? { status: changes.status } : {}), ...(changes.coachId !== undefined ? { coach_id: changes.coachId } : {}) } : item)); if (initialData.demo) { setBookings((items) => items.map((item) => item.id === id ? { ...item, meeting_location: changes.meetingLocation ?? item.meeting_location, meeting_url: changes.meetingUrl ?? item.meeting_url, manual_join_instructions: changes.joinInstructions ?? item.manual_join_instructions, admin_note: changes.adminNote ?? item.admin_note, refund_status: changes.refundStatus ?? item.refund_status } : item)); return; } const response = await fetch(`/api/booking-requests/${id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ companyId: initialData.companyId, ...changes }) }); const body = await response.json(); if (!response.ok) { setBookings(previous); setActionError(body.error || "Could not update booking."); } else setBookings((items) => items.map((item) => item.id === id ? { ...body.booking, member_profile: item.member_profile } : item)); }
-  async function issueRefund(id: string) { const previous = bookings; setActionError(""); setBookings((items) => items.map((item) => item.id === id ? { ...item, status: "cancelled", refund_status: "processing" } : item)); if (initialData.demo) return; const response = await fetch(`/api/booking-requests/${id}/refund`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ companyId: initialData.companyId }) }); const body = await response.json(); if (!response.ok) { setBookings(previous); setActionError(body.error || "Could not issue refund."); } else setBookings((items) => items.map((item) => item.id === id ? { ...body.booking, member_profile: item.member_profile } : item)); }
-  async function togglePause() { const next = !paused; setPaused(next); if (!initialData.demo) { const response = await fetch("/api/settings/pause", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ companyId: initialData.companyId, paused: next }) }); if (!response.ok) setPaused(!next); } }
-  return <main className="admin-shell"><aside className={`sidebar ${mobileNav ? "open" : ""}`}><div className="sidebar-brand"><span className="brand-mark">S</span><div><strong>Scaled Coaching</strong><small>Operations</small></div><button className="icon-button mobile-only" onClick={() => setMobileNav(false)}><X size={18}/></button></div><nav className="side-nav">{nav.map((item) => <button key={item.key} className={section === item.key ? "active" : ""} onClick={() => { setSection(item.key); setMobileNav(false); }}><item.icon size={18}/><span>{item.label}</span>{item.key === "bookings" && pending.length > 0 && <em>{pending.length}</em>}</button>)}</nav><div className={`pause-panel ${paused ? "paused" : ""}`}><div><Power size={17}/><strong>{paused ? "Bookings paused" : "Bookings open"}</strong></div><p>{paused ? "Members cannot submit requests." : "Availability rules are active."}</p><button onClick={togglePause}>{paused ? "Resume bookings" : "Emergency pause"}</button></div></aside>
-    <section className="admin-main"><header className="topbar"><button className="icon-button mobile-only" onClick={() => setMobileNav(true)}><Menu size={20}/></button><div><p className="eyebrow">Creator dashboard</p><h1>{nav.find((item) => item.key === section)?.label}</h1></div><div className="topbar-actions">{initialData.demo && <span className="status-badge draft">Preview data</span>}<span className={`status-badge ${paused ? "draft" : "published"}`}>{paused ? "Paused" : "Accepting bookings"}</span></div></header>{paused && <div className="pause-banner"><AlertTriangle size={18}/><span><strong>Emergency pause is active.</strong> Existing sessions are untouched.</span><button onClick={togglePause}>Resume</button></div>}
-      {section === "overview" && <Overview pending={pending} confirmed={confirmed} windows={windows} bookings={bookings} onSelect={setSection}/>}
-      {section === "bookings" && <BookingsBoard bookings={bookings} coaches={coaches} error={actionError} onUpdate={updateBooking} onRefund={issueRefund}/>}
-      {section === "offers" && <OfferManager companyId={initialData.companyId} demo={initialData.demo} initialOffers={offers} coaches={coaches} onOffersChange={setOffers}/>}
-      {section === "availability" && <AvailabilityManager companyId={initialData.companyId} demo={initialData.demo} coaches={coaches} initialRules={availability} timezone={initialData.settings.default_timezone} onAddBlackout={() => setBlackoutOpen(true)} onRulesChange={setAvailability}/>}
-      {section === "unavailable" && <UnavailableView windows={windows} companyId={initialData.companyId} demo={initialData.demo} onAdd={() => setBlackoutOpen(true)} onRemove={(id) => setWindows((items) => items.filter((item) => item.id !== id))}/>}
-      {section === "coaches" && <CoachManager companyId={initialData.companyId} demo={initialData.demo} initialCoaches={coaches} onCoachesChange={setCoaches}/>}
-      {section === "customers" && <CustomersView bookings={bookings}/>}
-      {section === "settings" && <SettingsManager companyId={initialData.companyId} demo={initialData.demo} initialSettings={initialData.settings}/>}
-    </section>{blackoutOpen && <BlackoutModal companyId={initialData.companyId} demo={initialData.demo} onClose={() => setBlackoutOpen(false)} onCreate={(window) => { setWindows((items) => [window, ...items]); setBlackoutOpen(false); setSection("unavailable"); }}/>}</main>;
+export function AdminDashboard({
+  initialData,
+}: {
+  initialData: DashboardData;
+}) {
+  return (
+    <TenantThemeProvider initialSettings={initialData.settings}>
+      <AdminDashboardContent initialData={initialData} />
+    </TenantThemeProvider>
+  );
 }
 
-function Metric({ title, value, detail, tone }: { title: string; value: number; detail: string; tone?: string }) { return <article className={`metric-card ${tone ?? ""}`}><p>{title}</p><strong>{value}</strong><span>{detail}</span></article>; }
-function Overview({ pending, confirmed, windows, bookings, onSelect }: { pending: Booking[]; confirmed: Booking[]; windows: UnavailableWindow[]; bookings: Booking[]; onSelect: (section: Section) => void }) { const needsDetails = confirmed.filter((booking) => !booking.meeting_location && !booking.meeting_url).length; return <div className="content-stack fade-in"><section className="metric-grid"><Metric title="Pending requests" value={pending.length} detail="Ready for review" tone="attention"/><Metric title="Confirmed" value={confirmed.length} detail="Upcoming sessions"/><Metric title="Needs meeting details" value={needsDetails} detail="Before members can join"/><Metric title="Refund requests" value={bookings.filter((booking) => booking.refund_status === "requested").length} detail="Awaiting action"/></section><section className="dashboard-grid"><article className="panel"><div className="panel-heading"><div><p className="eyebrow">Attention needed</p><h2>Concierge queue</h2></div><button className="text-button" onClick={() => onSelect("bookings")}>View all <ChevronRight size={15}/></button></div>{pending.length === 0 ? <Empty text="Your queue is clear."/> : pending.slice(0, 6).map((booking) => <div className="queue-item" key={booking.id}><span className="avatar">{bookingMemberInitial(booking)}</span><div><strong>{booking.booking_offers?.title ?? "Coaching session"}</strong><p>{bookingMemberLabel(booking)} · {formatDate(booking.requested_start_at)}</p></div><span className="health-badge warning">Review</span></div>)}</article><article className="panel"><div className="panel-heading"><div><p className="eyebrow">Calendar protection</p><h2>Upcoming blackouts</h2></div></div>{windows.length === 0 ? <Empty text="No upcoming blackouts."/> : windows.slice(0, 4).map((window) => <div className="window-row" key={window.id}><div className="date-tile"><strong>{new Date(window.starts_at).getDate()}</strong><span>{new Intl.DateTimeFormat("en-US", { month: "short" }).format(new Date(window.starts_at))}</span></div><div><strong>{window.title}</strong><p>{formatDate(window.starts_at)}</p></div></div>)}</article></section></div>; }
+function AdminDashboardContent({
+  initialData,
+}: {
+  initialData: DashboardData;
+}) {
+  const { settings: tenantSettings } = useTenantTheme();
+  const [section, setSection] = useState<Section>("overview");
+  const [mobileNav, setMobileNav] = useState(false);
+  const [paused, setPaused] = useState(initialData.emergencyPaused);
+  const [bookings, setBookings] = useState(initialData.bookings);
+  const [offers, setOffers] = useState(initialData.offers);
+  const [coaches, setCoaches] = useState(initialData.coaches);
+  const [availability, setAvailability] = useState(initialData.availability);
+  const [windows, setWindows] = useState(initialData.unavailable);
+  const [blackoutOpen, setBlackoutOpen] = useState(false);
+  const [actionError, setActionError] = useState("");
+  const pending = bookings.filter((booking) =>
+    ["requested", "reschedule_requested"].includes(booking.status),
+  );
+  const confirmed = bookings.filter(
+    (booking) => booking.status === "confirmed",
+  );
+  async function updateBooking(id: string, changes: BookingChanges) {
+    const previous = bookings;
+    setActionError("");
+    setBookings((items) =>
+      items.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              ...(changes.status ? { status: changes.status } : {}),
+              ...(changes.coachId !== undefined
+                ? { coach_id: changes.coachId }
+                : {}),
+            }
+          : item,
+      ),
+    );
+    if (initialData.demo) {
+      setBookings((items) =>
+        items.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                meeting_location:
+                  changes.meetingLocation ?? item.meeting_location,
+                meeting_url: changes.meetingUrl ?? item.meeting_url,
+                manual_join_instructions:
+                  changes.joinInstructions ?? item.manual_join_instructions,
+                admin_note: changes.adminNote ?? item.admin_note,
+                refund_status: changes.refundStatus ?? item.refund_status,
+              }
+            : item,
+        ),
+      );
+      return;
+    }
+    const response = await fetch(`/api/booking-requests/${id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ companyId: initialData.companyId, ...changes }),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      setBookings(previous);
+      setActionError(body.error || "Could not update booking.");
+    } else
+      setBookings((items) =>
+        items.map((item) =>
+          item.id === id
+            ? { ...body.booking, member_profile: item.member_profile }
+            : item,
+        ),
+      );
+  }
+  async function issueRefund(id: string) {
+    const previous = bookings;
+    setActionError("");
+    setBookings((items) =>
+      items.map((item) =>
+        item.id === id
+          ? { ...item, status: "cancelled", refund_status: "processing" }
+          : item,
+      ),
+    );
+    if (initialData.demo) return;
+    const response = await fetch(`/api/booking-requests/${id}/refund`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ companyId: initialData.companyId }),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      setBookings(previous);
+      setActionError(body.error || "Could not issue refund.");
+    } else
+      setBookings((items) =>
+        items.map((item) =>
+          item.id === id
+            ? { ...body.booking, member_profile: item.member_profile }
+            : item,
+        ),
+      );
+  }
+  async function togglePause() {
+    const next = !paused;
+    setPaused(next);
+    if (!initialData.demo) {
+      const response = await fetch("/api/settings/pause", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          companyId: initialData.companyId,
+          paused: next,
+        }),
+      });
+      if (!response.ok) setPaused(!next);
+    }
+  }
+  return (
+    <main className="admin-shell">
+      <aside className={`sidebar ${mobileNav ? "open" : ""}`}>
+        <div className="sidebar-brand">
+          <AppBrand />
+          <button
+            className="icon-button mobile-only"
+            onClick={() => setMobileNav(false)}
+            aria-label="Close navigation"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        <nav className="side-nav">
+          {nav.map((item) => (
+            <button
+              key={item.key}
+              className={section === item.key ? "active" : ""}
+              onClick={() => {
+                setSection(item.key);
+                setMobileNav(false);
+              }}
+            >
+              <item.icon size={18} />
+              <span>{item.label}</span>
+              {item.key === "bookings" && pending.length > 0 && (
+                <em>{pending.length}</em>
+              )}
+            </button>
+          ))}
+        </nav>
+        <div className={`pause-panel ${paused ? "paused" : ""}`}>
+          <div>
+            <Power size={17} />
+            <strong>{paused ? "Bookings paused" : "Bookings open"}</strong>
+          </div>
+          <p>
+            {paused
+              ? "Members cannot submit requests."
+              : "Availability rules are active."}
+          </p>
+          <button onClick={togglePause}>
+            {paused ? "Resume bookings" : "Emergency pause"}
+          </button>
+        </div>
+      </aside>
+      <section className="admin-main">
+        <header className="topbar">
+          <button
+            className="icon-button mobile-only"
+            onClick={() => setMobileNav(true)}
+          >
+            <Menu size={20} />
+          </button>
+          <div>
+            <p className="eyebrow">Creator dashboard</p>
+            <h1>{nav.find((item) => item.key === section)?.label}</h1>
+          </div>
+          <div className="topbar-actions">
+            {initialData.demo && (
+              <span className="status-badge draft">Preview data</span>
+            )}
+            <span className={`status-badge ${paused ? "draft" : "published"}`}>
+              {paused ? "Paused" : "Accepting bookings"}
+            </span>
+          </div>
+        </header>
+        {paused && (
+          <div className="pause-banner">
+            <AlertTriangle size={18} />
+            <span>
+              <strong>Emergency pause is active.</strong> Existing sessions are
+              untouched.
+            </span>
+            <button onClick={togglePause}>Resume</button>
+          </div>
+        )}
+        {section === "overview" && (
+          <Overview
+            pending={pending}
+            confirmed={confirmed}
+            windows={windows}
+            bookings={bookings}
+            onSelect={setSection}
+          />
+        )}
+        {section === "bookings" && (
+          <BookingsBoard
+            bookings={bookings}
+            coaches={coaches}
+            error={actionError}
+            onUpdate={updateBooking}
+            onRefund={issueRefund}
+          />
+        )}
+        {section === "offers" && (
+          <OfferManager
+            companyId={initialData.companyId}
+            demo={initialData.demo}
+            initialOffers={offers}
+            coaches={coaches}
+            onOffersChange={setOffers}
+          />
+        )}
+        {section === "availability" && (
+          <AvailabilityManager
+            companyId={initialData.companyId}
+            demo={initialData.demo}
+            coaches={coaches}
+            initialRules={availability}
+          timezone={tenantSettings.default_timezone}
+            onAddBlackout={() => setBlackoutOpen(true)}
+            onRulesChange={setAvailability}
+          />
+        )}
+        {section === "unavailable" && (
+          <UnavailableView
+            windows={windows}
+            companyId={initialData.companyId}
+            demo={initialData.demo}
+            onAdd={() => setBlackoutOpen(true)}
+            onRemove={(id) =>
+              setWindows((items) => items.filter((item) => item.id !== id))
+            }
+          />
+        )}
+        {section === "coaches" && (
+          <CoachManager
+            companyId={initialData.companyId}
+            demo={initialData.demo}
+            initialCoaches={coaches}
+            onCoachesChange={setCoaches}
+          />
+        )}
+        {section === "customers" && <CustomersView bookings={bookings} />}
+        {section === "settings" && (
+          <SettingsManager
+            companyId={initialData.companyId}
+            demo={initialData.demo}
+          initialSettings={tenantSettings}
+          />
+        )}
+      </section>
+      {blackoutOpen && (
+        <BlackoutModal
+          companyId={initialData.companyId}
+          demo={initialData.demo}
+          onClose={() => setBlackoutOpen(false)}
+          onCreate={(window) => {
+            setWindows((items) => [window, ...items]);
+            setBlackoutOpen(false);
+            setSection("unavailable");
+          }}
+        />
+      )}
+    </main>
+  );
+}
 
-function BookingsBoard({ bookings, coaches, error, onUpdate, onRefund }: { bookings: Booking[]; coaches: DashboardData["coaches"]; error: string; onUpdate: (id: string, changes: BookingChanges) => void; onRefund: (id: string) => void }) { const [selectedId, setSelectedId] = useState<string | null>(null); const columns = [{ title: "Pending", test: (booking: Booking) => ["requested", "reschedule_requested"].includes(booking.status) }, { title: "Confirmed", test: (booking: Booking) => booking.status === "confirmed" }, { title: "Refunds", test: (booking: Booking) => ["requested", "processing"].includes(booking.refund_status ?? "") }, { title: "Completed", test: (booking: Booking) => booking.status === "completed" }]; const selected = bookings.find((booking) => booking.id === selectedId); const coachOptions = [{ value: "", label: "Unassigned" }, ...coaches.map((coach) => ({ value: coach.id, label: coach.name }))]; return <div className="content-stack fade-in"><div className="section-intro"><p>Paid requests appear only after Whop confirms payment. Open a booking to add meeting details, notes, or propose another time.</p></div>{error && <p className="form-error action-error">{error}</p>}<div className="booking-board">{columns.map((column) => <section className="board-column" key={column.title}><header><h2>{column.title}</h2><span>{bookings.filter(column.test).length}</span></header>{bookings.filter(column.test).map((booking) => <article className="booking-ticket" key={`${column.title}-${booking.id}`}><div className="ticket-top"><span className={`health-badge ${booking.status === "confirmed" ? "success" : "warning"}`}>{booking.refund_status && booking.refund_status !== "not_requested" ? booking.refund_status : booking.status.replaceAll("_", " ")}</span><small>{booking.booking_offers?.duration_minutes} min</small></div><h3>{booking.booking_offers?.title ?? "Coaching session"}</h3><p>{formatDate(booking.confirmed_start_at ?? booking.requested_start_at)}</p><div className="member-line"><span className="avatar">{bookingMemberInitial(booking)}</span><span>{bookingMemberLabel(booking)}</span></div>{column.title !== "Refunds" && <div className="ticket-select"><span>Coach</span><CustomSelect value={booking.coach_id ?? ""} options={coachOptions} onChange={(value) => onUpdate(booking.id, { coachId: value || null })} ariaLabel="Assigned coach"/></div>}<button className="ticket-details" onClick={() => setSelectedId(booking.id)}>Open details</button>{["requested", "reschedule_requested"].includes(booking.status) && <div className="ticket-actions"><button className="confirm-button" onClick={() => onUpdate(booking.id, { status: "confirmed" })}><Check size={15}/> Confirm</button><button onClick={() => onUpdate(booking.id, { status: "declined" })}>Decline</button></div>}{booking.status === "confirmed" && <div className="ticket-actions"><button onClick={() => onUpdate(booking.id, { status: "completed" })}>Complete</button>{booking.whop_payment_id && <button onClick={() => onRefund(booking.id)}>Refund</button>}</div>}{column.title === "Refunds" && booking.refund_status === "requested" && <div className="ticket-actions"><button className="confirm-button" onClick={() => onRefund(booking.id)}>Issue refund</button><button onClick={() => onUpdate(booking.id, { refundStatus: "declined" })}>Decline</button></div>}</article>)}</section>)}</div>{selected && <BookingDetail booking={selected} coaches={coaches} onClose={() => setSelectedId(null)} onUpdate={onUpdate}/>}</div>; }
+function Metric({
+  title,
+  value,
+  detail,
+  tone,
+}: {
+  title: string;
+  value: number;
+  detail: string;
+  tone?: string;
+}) {
+  return (
+    <article className={`metric-card ${tone ?? ""}`}>
+      <p>{title}</p>
+      <strong>{value}</strong>
+      <span>{detail}</span>
+    </article>
+  );
+}
+function Overview({
+  pending,
+  confirmed,
+  windows,
+  bookings,
+  onSelect,
+}: {
+  pending: Booking[];
+  confirmed: Booking[];
+  windows: UnavailableWindow[];
+  bookings: Booking[];
+  onSelect: (section: Section) => void;
+}) {
+  const needsDetails = confirmed.filter(
+    (booking) => !booking.meeting_location && !booking.meeting_url,
+  ).length;
+  return (
+    <div className="content-stack fade-in">
+      <section className="metric-grid">
+        <Metric
+          title="Pending requests"
+          value={pending.length}
+          detail="Ready for review"
+          tone="attention"
+        />
+        <Metric
+          title="Confirmed"
+          value={confirmed.length}
+          detail="Upcoming sessions"
+        />
+        <Metric
+          title="Needs meeting details"
+          value={needsDetails}
+          detail="Before members can join"
+        />
+        <Metric
+          title="Refund requests"
+          value={
+            bookings.filter((booking) => booking.refund_status === "requested")
+              .length
+          }
+          detail="Awaiting action"
+        />
+      </section>
+      <section className="dashboard-grid">
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Attention needed</p>
+              <h2>Concierge queue</h2>
+            </div>
+            <button
+              className="text-button"
+              onClick={() => onSelect("bookings")}
+            >
+              View all <ChevronRight size={15} />
+            </button>
+          </div>
+          {pending.length === 0 ? (
+            <Empty text="Your queue is clear." />
+          ) : (
+            pending.slice(0, 6).map((booking) => (
+              <div className="queue-item" key={booking.id}>
+                <span className="avatar">{bookingMemberInitial(booking)}</span>
+                <div>
+                  <strong>
+                    {booking.booking_offers?.title ?? "Coaching session"}
+                  </strong>
+                  <p>
+                    {bookingMemberLabel(booking)} ·{" "}
+                    {formatDate(booking.requested_start_at)}
+                  </p>
+                </div>
+                <span className="health-badge warning">Review</span>
+              </div>
+            ))
+          )}
+        </article>
+        <article className="panel">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Calendar protection</p>
+              <h2>Upcoming blackouts</h2>
+            </div>
+          </div>
+          {windows.length === 0 ? (
+            <Empty text="No upcoming blackouts." />
+          ) : (
+            windows.slice(0, 4).map((window) => (
+              <div className="window-row" key={window.id}>
+                <div className="date-tile">
+                  <strong>{new Date(window.starts_at).getDate()}</strong>
+                  <span>
+                    {new Intl.DateTimeFormat("en-US", {
+                      month: "short",
+                    }).format(new Date(window.starts_at))}
+                  </span>
+                </div>
+                <div>
+                  <strong>{window.title}</strong>
+                  <p>{formatDate(window.starts_at)}</p>
+                </div>
+              </div>
+            ))
+          )}
+        </article>
+      </section>
+    </div>
+  );
+}
 
-function BookingDetail({ booking, coaches, onClose, onUpdate }: { booking: Booking; coaches: DashboardData["coaches"]; onClose: () => void; onUpdate: (id: string, changes: BookingChanges) => void }) { const [form, setForm] = useState({ coachId: booking.coach_id ?? "", meetingLocation: booking.meeting_location ?? "", meetingUrl: booking.meeting_url ?? "", joinInstructions: booking.manual_join_instructions ?? "", adminNote: booking.admin_note ?? "", proposedTime: "" }); const coachOptions = [{ value: "", label: "Unassigned" }, ...coaches.map((coach) => ({ value: coach.id, label: coach.name }))]; return <div className="modal-backdrop"><form className="modal booking-detail-modal sc-card" onSubmit={(event) => { event.preventDefault(); onUpdate(booking.id, { coachId: form.coachId || null, meetingLocation: form.meetingLocation, meetingUrl: form.meetingUrl, joinInstructions: form.joinInstructions, adminNote: form.adminNote, ...(form.proposedTime ? { requestedStartAt: new Date(form.proposedTime).toISOString(), status: "reschedule_requested" as const } : {}) }); onClose(); }}><div className="panel-heading"><div><p className="eyebrow">Booking details</p><h2>{booking.booking_offers?.title}</h2><p>{bookingMemberLabel(booking)} · {formatDate(booking.requested_start_at)}</p></div><button type="button" className="icon-button" onClick={onClose}><X size={18}/></button></div><div className="form-grid"><div className="field"><label>Assigned coach</label><CustomSelect value={form.coachId} options={coachOptions} onChange={(value) => setForm({ ...form, coachId: value })}/></div><div className="field"><label>Propose another time</label><input type="datetime-local" value={form.proposedTime} onChange={(event) => setForm({ ...form, proposedTime: event.target.value })}/></div></div><div className="form-grid"><div className="field"><label>Meeting location</label><input value={form.meetingLocation} onChange={(event) => setForm({ ...form, meetingLocation: event.target.value })} placeholder="Zoom, Discord, Google Meet…"/></div><div className="field"><label>Private meeting URL</label><input type="url" value={form.meetingUrl} onChange={(event) => setForm({ ...form, meetingUrl: event.target.value })} placeholder="https://"/></div></div><div className="field"><label>Customer joining instructions</label><textarea value={form.joinInstructions} onChange={(event) => setForm({ ...form, joinInstructions: event.target.value })}/></div><div className="field"><label>Private admin note</label><textarea value={form.adminNote} onChange={(event) => setForm({ ...form, adminNote: event.target.value })}/></div><div className="request-summary"><div><span>Payment</span><strong>{booking.whop_payment_id ? "Paid through Whop" : "Free booking"}</strong></div><div><span>Customer goal</span><strong>{String(booking.intake_answers?.goal ?? "Not supplied")}</strong></div><div><span>Customer note</span><strong>{booking.member_note || "None"}</strong></div></div><div className="modal-actions"><button type="button" className="sc-btn-secondary" onClick={onClose}>Cancel</button><button className="sc-btn-primary">Save booking</button></div></form></div>; }
+function BookingsBoard({
+  bookings,
+  coaches,
+  error,
+  onUpdate,
+  onRefund,
+}: {
+  bookings: Booking[];
+  coaches: DashboardData["coaches"];
+  error: string;
+  onUpdate: (id: string, changes: BookingChanges) => void;
+  onRefund: (id: string) => void;
+}) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const columns = [
+    {
+      title: "Pending",
+      test: (booking: Booking) =>
+        ["requested", "reschedule_requested"].includes(booking.status),
+    },
+    {
+      title: "Confirmed",
+      test: (booking: Booking) => booking.status === "confirmed",
+    },
+    {
+      title: "Refunds",
+      test: (booking: Booking) =>
+        ["requested", "processing"].includes(booking.refund_status ?? ""),
+    },
+    {
+      title: "Completed",
+      test: (booking: Booking) => booking.status === "completed",
+    },
+  ];
+  const selected = bookings.find((booking) => booking.id === selectedId);
+  const coachOptions = [
+    { value: "", label: "Unassigned" },
+    ...coaches.map((coach) => ({ value: coach.id, label: coach.name })),
+  ];
+  return (
+    <div className="content-stack fade-in">
+      <div className="section-intro">
+        <p>
+          Paid requests appear only after Whop confirms payment. Open a booking
+          to add meeting details, notes, or propose another time.
+        </p>
+      </div>
+      {error && <p className="form-error action-error">{error}</p>}
+      <div className="booking-board">
+        {columns.map((column) => (
+          <section className="board-column" key={column.title}>
+            <header>
+              <h2>{column.title}</h2>
+              <span>{bookings.filter(column.test).length}</span>
+            </header>
+            {bookings.filter(column.test).map((booking) => (
+              <article
+                className="booking-ticket"
+                key={`${column.title}-${booking.id}`}
+              >
+                <div className="ticket-top">
+                  <span
+                    className={`health-badge ${booking.status === "confirmed" ? "success" : "warning"}`}
+                  >
+                    {booking.refund_status &&
+                    booking.refund_status !== "not_requested"
+                      ? booking.refund_status
+                      : booking.status.replaceAll("_", " ")}
+                  </span>
+                  <small>{booking.booking_offers?.duration_minutes} min</small>
+                </div>
+                <h3>{booking.booking_offers?.title ?? "Coaching session"}</h3>
+                <p>
+                  {formatDate(
+                    booking.confirmed_start_at ?? booking.requested_start_at,
+                  )}
+                </p>
+                <div className="member-line">
+                  <span className="avatar">
+                    {bookingMemberInitial(booking)}
+                  </span>
+                  <span>{bookingMemberLabel(booking)}</span>
+                </div>
+                {column.title !== "Refunds" && (
+                  <div className="ticket-select">
+                    <span>Coach</span>
+                    <CustomSelect
+                      value={booking.coach_id ?? ""}
+                      options={coachOptions}
+                      onChange={(value) =>
+                        onUpdate(booking.id, { coachId: value || null })
+                      }
+                      ariaLabel="Assigned coach"
+                    />
+                  </div>
+                )}
+                <button
+                  className="ticket-details"
+                  onClick={() => setSelectedId(booking.id)}
+                >
+                  Open details
+                </button>
+                {["requested", "reschedule_requested"].includes(
+                  booking.status,
+                ) && (
+                  <div className="ticket-actions">
+                    <button
+                      className="confirm-button"
+                      onClick={() =>
+                        onUpdate(booking.id, { status: "confirmed" })
+                      }
+                    >
+                      <Check size={15} /> Confirm
+                    </button>
+                    <button
+                      onClick={() =>
+                        onUpdate(booking.id, { status: "declined" })
+                      }
+                    >
+                      Decline
+                    </button>
+                  </div>
+                )}
+                {booking.status === "confirmed" && (
+                  <div className="ticket-actions">
+                    <button
+                      onClick={() =>
+                        onUpdate(booking.id, { status: "completed" })
+                      }
+                    >
+                      Complete
+                    </button>
+                    {booking.whop_payment_id && (
+                      <button onClick={() => onRefund(booking.id)}>
+                        Refund
+                      </button>
+                    )}
+                  </div>
+                )}
+                {column.title === "Refunds" &&
+                  booking.refund_status === "requested" && (
+                    <div className="ticket-actions">
+                      <button
+                        className="confirm-button"
+                        onClick={() => onRefund(booking.id)}
+                      >
+                        Issue refund
+                      </button>
+                      <button
+                        onClick={() =>
+                          onUpdate(booking.id, { refundStatus: "declined" })
+                        }
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  )}
+              </article>
+            ))}
+          </section>
+        ))}
+      </div>
+      {selected && (
+        <BookingDetail
+          booking={selected}
+          coaches={coaches}
+          onClose={() => setSelectedId(null)}
+          onUpdate={onUpdate}
+        />
+      )}
+    </div>
+  );
+}
 
-function UnavailableView({ windows, companyId, demo, onAdd, onRemove }: { windows: UnavailableWindow[]; companyId: string; demo: boolean; onAdd: () => void; onRemove: (id: string) => void }) { async function remove(id: string) { if (!demo) { const response = await fetch(`/api/unavailable-windows?companyId=${encodeURIComponent(companyId)}&id=${encodeURIComponent(id)}`, { method: "DELETE" }); if (!response.ok) return; } onRemove(id); } return <div className="content-stack fade-in"><section className="unavailable-hero"><div><p className="eyebrow">Calendar protection</p><h2>Block time before it becomes a problem.</h2><p>Blackouts are removed from every availability calculation on the server.</p></div><button className="sc-btn-primary" onClick={onAdd}><Plus size={16}/> New unavailable window</button></section><div className="panel"><div className="panel-heading"><div><h2>Active windows</h2></div></div>{windows.length === 0 && <Empty text="No unavailable dates."/>}{windows.map((window) => <div className="blackout-row" key={window.id}><span className="blackout-icon"><Ban size={19}/></span><div><strong>{window.title}</strong><p>{formatDate(window.starts_at)} to {formatDate(window.ends_at)}</p></div><span className="health-badge neutral">{window.all_day ? "All day" : "Partial day"}</span><button className="remove-link" onClick={() => remove(window.id)}>Remove</button></div>)}</div></div>; }
-function Empty({ text }: { text: string }) { return <div className="empty-state"><Check size={20}/><p>{text}</p></div>; }
-function BlackoutModal({ companyId, demo, onClose, onCreate }: { companyId: string; demo: boolean; onClose: () => void; onCreate: (window: UnavailableWindow) => void }) { const [form, setForm] = useState({ title: "Unavailable", startsAt: tomorrowDate, endsAt: tomorrowDate, reason: "" }); const [error, setError] = useState(""); const [saving, setSaving] = useState(false); async function submit(event: React.FormEvent) { event.preventDefault(); setSaving(true); setError(""); const body = { companyId, title: form.title, reason: form.reason, startsAt: new Date(`${form.startsAt}T00:00:00`).toISOString(), endsAt: new Date(`${form.endsAt}T23:59:59`).toISOString(), allDay: true }; try { let window: UnavailableWindow; if (demo) window = { id: crypto.randomUUID(), whop_company_id: companyId, coach_id: null, offer_id: null, title: form.title, reason: form.reason, starts_at: body.startsAt, ends_at: body.endsAt, all_day: true, recurrence_rule: null, status: "active" }; else { const response = await fetch("/api/unavailable-windows", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const payload = await response.json(); if (!response.ok) throw new Error(payload.error); window = payload.window; } onCreate(window); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not add blackout."); } finally { setSaving(false); } } return <div className="modal-backdrop"><form className="modal sc-card" onSubmit={submit}><div className="panel-heading"><div><p className="eyebrow">Protect your time</p><h2>Add unavailable dates</h2></div><button type="button" className="icon-button" onClick={onClose}><X size={19}/></button></div><div className="field"><label>Label</label><input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required/></div><div className="form-grid"><div className="field"><label>First day</label><input type="date" value={form.startsAt} onChange={(event) => setForm({ ...form, startsAt: event.target.value })}/></div><div className="field"><label>Last day</label><input type="date" min={form.startsAt} value={form.endsAt} onChange={(event) => setForm({ ...form, endsAt: event.target.value })}/></div></div><div className="field"><label>Private note</label><textarea value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })}/></div>{error && <p className="form-error">{error}</p>}<div className="modal-actions"><button type="button" className="sc-btn-secondary" onClick={onClose}>Cancel</button><button className="sc-btn-primary" disabled={saving}>{saving ? "Blocking…" : "Block dates"}</button></div></form></div>; }
+function BookingDetail({
+  booking,
+  coaches,
+  onClose,
+  onUpdate,
+}: {
+  booking: Booking;
+  coaches: DashboardData["coaches"];
+  onClose: () => void;
+  onUpdate: (id: string, changes: BookingChanges) => void;
+}) {
+  const [form, setForm] = useState({
+    coachId: booking.coach_id ?? "",
+    meetingLocation: booking.meeting_location ?? "",
+    meetingUrl: booking.meeting_url ?? "",
+    joinInstructions: booking.manual_join_instructions ?? "",
+    adminNote: booking.admin_note ?? "",
+    proposedTime: "",
+  });
+  const coachOptions = [
+    { value: "", label: "Unassigned" },
+    ...coaches.map((coach) => ({ value: coach.id, label: coach.name })),
+  ];
+  return (
+    <div className="modal-backdrop">
+      <form
+        className="modal booking-detail-modal sc-card"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onUpdate(booking.id, {
+            coachId: form.coachId || null,
+            meetingLocation: form.meetingLocation,
+            meetingUrl: form.meetingUrl,
+            joinInstructions: form.joinInstructions,
+            adminNote: form.adminNote,
+            ...(form.proposedTime
+              ? {
+                  requestedStartAt: new Date(form.proposedTime).toISOString(),
+                  status: "reschedule_requested" as const,
+                }
+              : {}),
+          });
+          onClose();
+        }}
+      >
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Booking details</p>
+            <h2>{booking.booking_offers?.title}</h2>
+            <p>
+              {bookingMemberLabel(booking)} ·{" "}
+              {formatDate(booking.requested_start_at)}
+            </p>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose}>
+            <X size={18} />
+          </button>
+        </div>
+        <div className="form-grid">
+          <div className="field">
+            <label>Assigned coach</label>
+            <CustomSelect
+              value={form.coachId}
+              options={coachOptions}
+              onChange={(value) => setForm({ ...form, coachId: value })}
+            />
+          </div>
+          <div className="field">
+            <label>Propose another time</label>
+            <input
+              type="datetime-local"
+              value={form.proposedTime}
+              onChange={(event) =>
+                setForm({ ...form, proposedTime: event.target.value })
+              }
+            />
+          </div>
+        </div>
+        <div className="form-grid">
+          <div className="field">
+            <label>Meeting location</label>
+            <input
+              value={form.meetingLocation}
+              onChange={(event) =>
+                setForm({ ...form, meetingLocation: event.target.value })
+              }
+              placeholder="Zoom, Discord, Google Meet…"
+            />
+          </div>
+          <div className="field">
+            <label>Private meeting URL</label>
+            <input
+              type="url"
+              value={form.meetingUrl}
+              onChange={(event) =>
+                setForm({ ...form, meetingUrl: event.target.value })
+              }
+              placeholder="https://"
+            />
+          </div>
+        </div>
+        <div className="field">
+          <label>Customer joining instructions</label>
+          <textarea
+            value={form.joinInstructions}
+            onChange={(event) =>
+              setForm({ ...form, joinInstructions: event.target.value })
+            }
+          />
+        </div>
+        <div className="field">
+          <label>Private admin note</label>
+          <textarea
+            value={form.adminNote}
+            onChange={(event) =>
+              setForm({ ...form, adminNote: event.target.value })
+            }
+          />
+        </div>
+        <div className="request-summary">
+          <div>
+            <span>Payment</span>
+            <strong>
+              {booking.whop_payment_id ? "Paid through Whop" : "Free booking"}
+            </strong>
+          </div>
+          <div>
+            <span>Customer goal</span>
+            <strong>
+              {String(booking.intake_answers?.goal ?? "Not supplied")}
+            </strong>
+          </div>
+          <div>
+            <span>Customer note</span>
+            <strong>{booking.member_note || "None"}</strong>
+          </div>
+        </div>
+        <div className="modal-actions">
+          <button type="button" className="sc-btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="sc-btn-primary">Save booking</button>
+        </div>
+      </form>
+    </div>
+  );
+}
+
+function UnavailableView({
+  windows,
+  companyId,
+  demo,
+  onAdd,
+  onRemove,
+}: {
+  windows: UnavailableWindow[];
+  companyId: string;
+  demo: boolean;
+  onAdd: () => void;
+  onRemove: (id: string) => void;
+}) {
+  async function remove(id: string) {
+    if (!demo) {
+      const response = await fetch(
+        `/api/unavailable-windows?companyId=${encodeURIComponent(companyId)}&id=${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      );
+      if (!response.ok) return;
+    }
+    onRemove(id);
+  }
+  return (
+    <div className="content-stack fade-in">
+      <section className="unavailable-hero">
+        <div>
+          <p className="eyebrow">Calendar protection</p>
+          <h2>Block time before it becomes a problem.</h2>
+          <p>
+            Blackouts are removed from every availability calculation on the
+            server.
+          </p>
+        </div>
+        <button className="sc-btn-primary" onClick={onAdd}>
+          <Plus size={16} /> New unavailable window
+        </button>
+      </section>
+      <div className="panel">
+        <div className="panel-heading">
+          <div>
+            <h2>Active windows</h2>
+          </div>
+        </div>
+        {windows.length === 0 && <Empty text="No unavailable dates." />}
+        {windows.map((window) => (
+          <div className="blackout-row" key={window.id}>
+            <span className="blackout-icon">
+              <Ban size={19} />
+            </span>
+            <div>
+              <strong>{window.title}</strong>
+              <p>
+                {formatDate(window.starts_at)} to {formatDate(window.ends_at)}
+              </p>
+            </div>
+            <span className="health-badge neutral">
+              {window.all_day ? "All day" : "Partial day"}
+            </span>
+            <button className="remove-link" onClick={() => remove(window.id)}>
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+function Empty({ text }: { text: string }) {
+  return (
+    <div className="empty-state">
+      <Check size={20} />
+      <p>{text}</p>
+    </div>
+  );
+}
+function BlackoutModal({
+  companyId,
+  demo,
+  onClose,
+  onCreate,
+}: {
+  companyId: string;
+  demo: boolean;
+  onClose: () => void;
+  onCreate: (window: UnavailableWindow) => void;
+}) {
+  const [form, setForm] = useState({
+    title: "Unavailable",
+    startsAt: tomorrowDate,
+    endsAt: tomorrowDate,
+    reason: "",
+  });
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    const body = {
+      companyId,
+      title: form.title,
+      reason: form.reason,
+      startsAt: new Date(`${form.startsAt}T00:00:00`).toISOString(),
+      endsAt: new Date(`${form.endsAt}T23:59:59`).toISOString(),
+      allDay: true,
+    };
+    try {
+      let window: UnavailableWindow;
+      if (demo)
+        window = {
+          id: crypto.randomUUID(),
+          whop_company_id: companyId,
+          coach_id: null,
+          offer_id: null,
+          title: form.title,
+          reason: form.reason,
+          starts_at: body.startsAt,
+          ends_at: body.endsAt,
+          all_day: true,
+          recurrence_rule: null,
+          status: "active",
+        };
+      else {
+        const response = await fetch("/api/unavailable-windows", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error);
+        window = payload.window;
+      }
+      onCreate(window);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Could not add blackout.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+  return (
+    <div className="modal-backdrop">
+      <form className="modal sc-card" onSubmit={submit}>
+        <div className="panel-heading">
+          <div>
+            <p className="eyebrow">Protect your time</p>
+            <h2>Add unavailable dates</h2>
+          </div>
+          <button type="button" className="icon-button" onClick={onClose}>
+            <X size={19} />
+          </button>
+        </div>
+        <div className="field">
+          <label>Label</label>
+          <input
+            value={form.title}
+            onChange={(event) =>
+              setForm({ ...form, title: event.target.value })
+            }
+            required
+          />
+        </div>
+        <div className="form-grid">
+          <div className="field">
+            <label>First day</label>
+            <input
+              type="date"
+              value={form.startsAt}
+              onChange={(event) =>
+                setForm({ ...form, startsAt: event.target.value })
+              }
+            />
+          </div>
+          <div className="field">
+            <label>Last day</label>
+            <input
+              type="date"
+              min={form.startsAt}
+              value={form.endsAt}
+              onChange={(event) =>
+                setForm({ ...form, endsAt: event.target.value })
+              }
+            />
+          </div>
+        </div>
+        <div className="field">
+          <label>Private note</label>
+          <textarea
+            value={form.reason}
+            onChange={(event) =>
+              setForm({ ...form, reason: event.target.value })
+            }
+          />
+        </div>
+        {error && <p className="form-error">{error}</p>}
+        <div className="modal-actions">
+          <button type="button" className="sc-btn-secondary" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="sc-btn-primary" disabled={saving}>
+            {saving ? "Blocking…" : "Block dates"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}

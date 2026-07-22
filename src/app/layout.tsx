@@ -5,7 +5,7 @@ import "./globals.css";
 const jakarta = Plus_Jakarta_Sans({ subsets: ["latin"], variable: "--font-jakarta" });
 
 export const metadata: Metadata = {
-  title: { default: "Scaled Coaching", template: "%s · Scaled Coaching" },
+  title: { default: "Coaching Bookings", template: "%s · Coaching Bookings" },
   description: "Premium, manually confirmed coaching bookings inside Whop.",
 };
 
