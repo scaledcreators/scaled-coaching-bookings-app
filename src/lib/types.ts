@@ -16,6 +16,7 @@ export type Offer = {
   buffer_before_minutes: number;
   buffer_after_minutes: number;
   capacity_per_slot: number;
+  coach_ids?: string[];
 };
 
 export type Booking = {
@@ -36,6 +37,12 @@ export type Booking = {
   meeting_location: string | null;
   meeting_url: string | null;
   manual_join_instructions: string | null;
+  whop_payment_id?: string | null;
+  refund_status?: "not_requested" | "requested" | "processing" | "refunded" | "declined" | "failed";
+  refund_reason?: string | null;
+  refund_requested_at?: string | null;
+  refunded_at?: string | null;
+  whop_refund_id?: string | null;
   created_at: string;
   booking_offers?: Pick<Offer, "title" | "duration_minutes"> | null;
 };

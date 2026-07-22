@@ -19,9 +19,19 @@ export async function getCompanyData(companyId: string): Promise<DashboardData> 
     if (result.error) throw result.error;
   }
 
+  const offerIds = (offers.data ?? []).map((offer) => offer.id);
+  const offerCoaches = offerIds.length
+    ? await supabase.from("offer_coaches").select("offer_id,coach_id").in("offer_id", offerIds)
+    : { data: [], error: null };
+  if (offerCoaches.error) throw offerCoaches.error;
+  const coachIdsByOffer = new Map<string, string[]>();
+  for (const link of offerCoaches.data ?? []) {
+    coachIdsByOffer.set(link.offer_id, [...(coachIdsByOffer.get(link.offer_id) ?? []), link.coach_id]);
+  }
+
   return {
     companyId,
-    offers: offers.data ?? [],
+    offers: (offers.data ?? []).map((offer) => ({ ...offer, coach_ids: coachIdsByOffer.get(offer.id) ?? [] })),
     bookings: bookings.data ?? [],
     unavailable: unavailable.data ?? [],
     coaches: coaches.data ?? [],

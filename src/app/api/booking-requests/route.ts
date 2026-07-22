@@ -23,6 +23,14 @@ export async function POST(request: Request) {
     ]);
     if (settingsError || offerError || !offer) throw new Error("This offer is not available.");
     if (settings?.emergency_paused) return Response.json({ error: "New bookings are temporarily paused." }, { status: 409 });
+    if (input.coachId) {
+      const { data: coach } = await supabase.from("coaches").select("id").eq("id", input.coachId).eq("whop_company_id", input.companyId).eq("status", "active").maybeSingle();
+      if (!coach) return Response.json({ error: "That coach is not available." }, { status: 409 });
+      const { data: links } = await supabase.from("offer_coaches").select("coach_id").eq("offer_id", input.offerId);
+      if ((links?.length ?? 0) > 0 && !links?.some((link) => link.coach_id === input.coachId)) {
+        return Response.json({ error: "That coach is not assigned to this offer." }, { status: 409 });
+      }
+    }
     const startsAt = new Date(input.startsAt);
     const endsAt = new Date(startsAt.getTime() + offer.duration_minutes * 60_000);
     const earliest = Date.now() + offer.min_notice_hours * 3_600_000;
