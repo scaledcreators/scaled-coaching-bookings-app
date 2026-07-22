@@ -8,6 +8,8 @@ export type Offer = {
   price_cents: number;
   currency: string;
   access_mode: "free" | "paid" | "members_only" | "manual_approval";
+  whop_product_id?: string | null;
+  whop_plan_id?: string | null;
   status: "draft" | "published" | "hidden" | "archived";
   checkout_url: string | null;
   requires_manual_confirmation: boolean;
@@ -27,10 +29,11 @@ export type Booking = {
   coach_id: string | null;
   status:
     | "draft"
+    | "pending_approval"
     | "pending_payment"
-    | "requested"
     | "confirmed"
-    | "declined"
+    | "rejected"
+    | "expired"
     | "reschedule_requested"
     | "cancelled"
     | "completed"
@@ -47,6 +50,13 @@ export type Booking = {
   meeting_url: string | null;
   manual_join_instructions: string | null;
   whop_payment_id?: string | null;
+  whop_experience_id?: string | null;
+  whop_checkout_configuration_id?: string | null;
+  payment_checkout_url?: string | null;
+  payment_due_at?: string | null;
+  approved_at?: string | null;
+  rejected_at?: string | null;
+  expired_at?: string | null;
   refund_status?:
     | "not_requested"
     | "requested"
@@ -59,7 +69,10 @@ export type Booking = {
   refunded_at?: string | null;
   whop_refund_id?: string | null;
   created_at: string;
-  booking_offers?: Pick<Offer, "title" | "duration_minutes"> | null;
+  booking_offers?: Pick<
+    Offer,
+    "title" | "duration_minutes" | "price_cents" | "access_mode"
+  > | null;
   member_profile?: { name: string | null; username: string | null } | null;
 };
 

@@ -678,10 +678,17 @@ button:disabled {
 }
 .booking-board {
   display: grid;
-  grid-template-columns: repeat(4, minmax(210px, 1fr));
+  grid-template-columns: repeat(5, minmax(220px, 1fr));
   gap: 12px;
   overflow: auto;
   padding-bottom: 8px;
+}
+.payment-deadline {
+  display: block;
+  margin-top: -4px;
+  color: var(--warning);
+  font-size: 10px;
+  font-weight: 700;
 }
 .board-column {
   min-height: 480px;
@@ -1397,7 +1404,7 @@ button:disabled {
     grid-template-columns: 1fr;
   }
   .booking-board {
-    grid-template-columns: repeat(4, 230px);
+    grid-template-columns: repeat(5, 230px);
   }
   .card-grid,
   .offer-grid {
@@ -1893,6 +1900,36 @@ select {
   padding: 8px 10px;
   font-size: 10px;
   cursor: pointer;
+}
+.booking-state-note {
+  display: grid;
+  gap: 5px;
+  margin-top: 14px;
+  border: 1px solid var(--brand-border);
+  border-radius: 12px;
+  background: var(--brand-soft);
+  padding: 12px;
+}
+.booking-state-note strong {
+  font-size: 12px;
+}
+.booking-state-note span {
+  color: var(--text-2);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.booking-state-note.payment-ready {
+  gap: 9px;
+  border-color: var(--brand-border-strong);
+  background: var(--brand-soft-strong);
+}
+.booking-state-note.payment-ready .sc-btn-primary {
+  width: 100%;
+  margin-top: 3px;
+}
+.booking-state-note.closed {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.025);
 }
 .meeting-box a {
   display: inline-flex;

@@ -18,6 +18,10 @@ import { CustomSelect } from "@/components/custom-select";
 import { DEFAULT_SUPPORT_CONTACT } from "@/lib/constants";
 import { AppBrand } from "@/components/app-brand";
 import { TenantThemeProvider } from "@/components/tenant-theme-provider";
+import {
+  bookingStatusLabel,
+  bookingStatusTone,
+} from "@/lib/booking-status";
 
 const money = (cents: number) =>
   cents === 0
@@ -104,8 +108,8 @@ function MemberExperienceContent({
           <div>
             <strong>Payment received.</strong>
             <p>
-              Your booking will move into review as soon as Whop finishes
-              processing the payment event.
+              Whop is confirming the charge. Your session will show as
+              Confirmed as soon as the payment event finishes processing.
             </p>
           </div>
         </div>
@@ -135,6 +139,10 @@ function MemberExperienceContent({
           offer={selected}
           data={data}
           onClose={() => setSelected(null)}
+          onSubmitted={(booking) => {
+            setBookings((items) => [booking, ...items]);
+            setView("bookings");
+          }}
         />
       )}{" "}
       {helpOpen && (
@@ -175,7 +183,8 @@ function Offers({
         <ShieldCheck size={19} />
         <p>
           <strong>Personally confirmed.</strong> Private meeting details appear
-          after your requested time is approved.
+          after your requested time is approved and any required payment is
+          complete.
         </p>
       </div>
       {data.emergencyPaused ? (
@@ -225,7 +234,7 @@ function Offers({
                   className="sc-btn-primary"
                   onClick={() => onSelect(offer)}
                 >
-                  {offer.price_cents ? "View & pay" : "Request a time"}
+                  Request a time
                   <ArrowRight size={16} />
                 </button>
               </div>
@@ -310,6 +319,40 @@ function MyBookings({
   const [newTime, setNewTime] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [payingId, setPayingId] = useState<string | null>(null);
+
+  async function beginPayment(booking: Booking) {
+    setPayingId(booking.id);
+    setError("");
+    try {
+      const response = await fetch(
+        `/api/booking-requests/${booking.id}/checkout`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ experienceId }),
+        },
+      );
+      const payload = await response.json();
+      if (!response.ok) {
+        if (response.status === 410) {
+          onChange({
+            ...booking,
+            status: "expired",
+            expired_at: new Date().toISOString(),
+          });
+        }
+        throw new Error(payload.error || "Could not start payment.");
+      }
+      window.location.assign(payload.checkoutUrl);
+    } catch (value) {
+      setError(
+        value instanceof Error ? value.message : "Could not start payment.",
+      );
+      setPayingId(null);
+    }
+  }
+
   async function act() {
     if (!dialog) return;
     setSaving(true);
@@ -368,6 +411,7 @@ function MyBookings({
     <section className="member-bookings">
       <p className="eyebrow">Your sessions</p>
       <h1>My bookings</h1>
+      {error && !dialog && <p className="form-error action-error">{error}</p>}
       <div className="member-booking-list">
         {bookings.length === 0 && (
           <div className="notice-empty sc-card">
@@ -380,7 +424,8 @@ function MyBookings({
           const active = ![
             "completed",
             "no_show",
-            "declined",
+            "rejected",
+            "expired",
             "cancelled",
           ].includes(booking.status);
           const refundOpen = ["requested", "processing", "refunded"].includes(
@@ -390,12 +435,12 @@ function MyBookings({
             <article className="member-booking-card sc-card" key={booking.id}>
               <div>
                 <span
-                  className={`health-badge ${booking.status === "confirmed" ? "success" : "warning"}`}
+                  className={`health-badge ${bookingStatusTone(booking.status)}`}
                 >
                   {booking.refund_status &&
                   booking.refund_status !== "not_requested"
                     ? `refund ${booking.refund_status}`
-                    : booking.status.replaceAll("_", " ")}
+                    : bookingStatusLabel(booking.status)}
                 </span>
                 <h2>{booking.booking_offers?.title}</h2>
                 <p>
@@ -412,8 +457,56 @@ function MyBookings({
                       )
                     : "Time pending"}
                 </p>
+                {booking.status === "pending_approval" && (
+                  <div className="booking-state-note">
+                    <strong>Waiting for coach approval</strong>
+                    <span>
+                      {booking.whop_payment_id
+                        ? "Payment was collected under the previous booking flow. If rejected, it will be returned automatically."
+                        : "No payment has been taken."}
+                    </span>
+                  </div>
+                )}
+                {booking.status === "pending_payment" && (
+                  <div className="booking-state-note payment-ready">
+                    <strong>Your request was approved</strong>
+                    <span>
+                      Complete payment
+                      {booking.payment_due_at
+                        ? ` by ${new Intl.DateTimeFormat("en-US", {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                            timeZone: timezone,
+                          }).format(new Date(booking.payment_due_at))}`
+                        : " within 24 hours"}
+                      {" to confirm this time."}
+                    </span>
+                    <button
+                      className="sc-btn-primary"
+                      disabled={payingId === booking.id}
+                      onClick={() => beginPayment(booking)}
+                    >
+                      {payingId === booking.id
+                        ? "Opening Whop…"
+                        : "Complete payment"}
+                      <ArrowRight size={15} />
+                    </button>
+                  </div>
+                )}
+                {booking.status === "rejected" && (
+                  <div className="booking-state-note closed">
+                    <strong>Request not approved</strong>
+                    <span>No payment was taken.</span>
+                  </div>
+                )}
+                {booking.status === "expired" && (
+                  <div className="booking-state-note closed">
+                    <strong>Payment window expired</strong>
+                    <span>This time has been released. You can request another.</span>
+                  </div>
+                )}
                 <div className="member-booking-actions">
-                  {active && booking.status !== "pending_payment" && (
+                  {booking.status === "confirmed" && (
                     <button
                       onClick={() => setDialog({ type: "reschedule", booking })}
                     >
@@ -504,7 +597,10 @@ function MyBookings({
             )}
             {dialog.type === "cancel" && (
               <div className="notice">
-                <span>This immediately cancels your free booking request.</span>
+                <span>
+                  This releases the requested time immediately. No payment has
+                  been taken.
+                </span>
               </div>
             )}
             {error && <p className="form-error">{error}</p>}
@@ -539,11 +635,13 @@ function BookingFlow({
   offer,
   data,
   onClose,
+  onSubmitted,
 }: {
   experienceId: string;
   offer: Offer;
   data: DashboardData;
   onClose: () => void;
+  onSubmitted: (booking: Booking) => void;
 }) {
   const eligible = offer.coach_ids?.length
     ? data.coaches.filter((coach) => offer.coach_ids?.includes(coach.id))
@@ -607,10 +705,7 @@ function BookingFlow({
         });
         const body = await response.json();
         if (!response.ok) throw new Error(body.error);
-        if (body.checkoutUrl) {
-          window.location.assign(body.checkoutUrl);
-          return;
-        }
+        onSubmitted(body.booking);
       }
       setSent(true);
     } catch (value) {
@@ -630,9 +725,12 @@ function BookingFlow({
           </span>
           <p className="eyebrow">Request received</p>
           <h2>Your request is in.</h2>
-          <p>You’ll see confirmation details here once it’s reviewed.</p>
+          <p>
+            No payment was taken. The coach will review your request first, and
+            paid sessions will give you up to 24 hours to pay after approval.
+          </p>
           <button className="sc-btn-primary" onClick={onClose}>
-            Back to coaching
+            View my bookings
           </button>
         </div>
       </div>
@@ -774,7 +872,7 @@ function BookingFlow({
                 <span>Price</span>
                 <strong>
                   {money(offer.price_cents)}
-                  {offer.price_cents ? " via Whop" : ""}
+                  {offer.price_cents ? " after approval via Whop" : ""}
                 </strong>
               </div>
             </div>
@@ -782,8 +880,8 @@ function BookingFlow({
               <ShieldCheck size={17} />
               <span>
                 {offer.price_cents
-                  ? "Payment is required before the coach receives your request."
-                  : "This request still needs coach confirmation."}
+                  ? "Your coach reviews this request before payment. If approved, you’ll have up to 24 hours to pay and confirm the slot."
+                  : "This request still needs coach approval. No payment is required."}
               </span>
             </div>
             {error && <p className="form-error">{error}</p>}
@@ -792,11 +890,7 @@ function BookingFlow({
               disabled={saving}
               onClick={submit}
             >
-              {saving
-                ? "Sending…"
-                : offer.price_cents
-                  ? "Pay securely with Whop"
-                  : "Send request"}
+              {saving ? "Sending…" : "Send request"}
               <ArrowRight size={16} />
             </button>
           </div>

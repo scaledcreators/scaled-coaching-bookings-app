@@ -26,6 +26,10 @@ import { SettingsManager } from "@/components/settings-manager";
 import { CustomSelect } from "@/components/custom-select";
 import { CustomDateRangePicker } from "@/components/custom-date-range-picker";
 import { bookingMemberInitial, bookingMemberLabel } from "@/lib/member";
+import {
+  bookingStatusLabel,
+  bookingStatusTone,
+} from "@/lib/booking-status";
 import { AppBrand } from "@/components/app-brand";
 import {
   TenantThemeProvider,
@@ -104,7 +108,10 @@ function AdminDashboardContent({
   const [blackoutOpen, setBlackoutOpen] = useState(false);
   const [actionError, setActionError] = useState("");
   const pending = bookings.filter((booking) =>
-    ["requested", "reschedule_requested"].includes(booking.status),
+    ["pending_approval", "reschedule_requested"].includes(booking.status),
+  );
+  const awaitingPayment = bookings.filter(
+    (booking) => booking.status === "pending_payment",
   );
   const confirmed = bookings.filter(
     (booking) => booking.status === "confirmed",
@@ -161,6 +168,75 @@ function AdminDashboardContent({
             : item,
         ),
       );
+  }
+  async function decideBooking(
+    id: string,
+    action: "approve" | "reject",
+    coachId?: string | null,
+  ) {
+    const previous = bookings;
+    const current = bookings.find((booking) => booking.id === id);
+    if (!current) return;
+    setActionError("");
+
+    if (initialData.demo) {
+      const needsPayment =
+        action === "approve" &&
+        current.booking_offers?.access_mode === "paid" &&
+        (current.booking_offers?.price_cents ?? 0) > 0 &&
+        !current.whop_payment_id;
+      setBookings((items) =>
+        items.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                coach_id: coachId ?? item.coach_id,
+                status:
+                  action === "reject"
+                    ? "rejected"
+                    : needsPayment
+                      ? "pending_payment"
+                      : "confirmed",
+                payment_due_at: needsPayment
+                  ? new Date(Date.now() + 24 * 3_600_000).toISOString()
+                  : null,
+                confirmed_start_at:
+                  action === "approve" && !needsPayment
+                    ? item.requested_start_at
+                    : item.confirmed_start_at,
+                confirmed_end_at:
+                  action === "approve" && !needsPayment
+                    ? item.requested_end_at
+                    : item.confirmed_end_at,
+              }
+            : item,
+        ),
+      );
+      return;
+    }
+
+    const response = await fetch(`/api/booking-requests/${id}/decision`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        companyId: initialData.companyId,
+        action,
+        coachId,
+      }),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      setBookings(previous);
+      setActionError(body.error || "Could not update this request.");
+      return;
+    }
+    setBookings((items) =>
+      items.map((item) =>
+        item.id === id
+          ? { ...body.booking, member_profile: item.member_profile }
+          : item,
+      ),
+    );
   }
   async function issueRefund(id: string) {
     const previous = bookings;
@@ -286,6 +362,7 @@ function AdminDashboardContent({
         {section === "overview" && (
           <Overview
             pending={pending}
+            awaitingPayment={awaitingPayment}
             confirmed={confirmed}
             windows={windows}
             bookings={bookings}
@@ -298,6 +375,7 @@ function AdminDashboardContent({
             coaches={coaches}
             error={actionError}
             onUpdate={updateBooking}
+            onDecision={decideBooking}
             onRefund={issueRefund}
           />
         )}
@@ -386,38 +464,38 @@ function Metric({
 }
 function Overview({
   pending,
+  awaitingPayment,
   confirmed,
   windows,
   bookings,
   onSelect,
 }: {
   pending: Booking[];
+  awaitingPayment: Booking[];
   confirmed: Booking[];
   windows: UnavailableWindow[];
   bookings: Booking[];
   onSelect: (section: Section) => void;
 }) {
-  const needsDetails = confirmed.filter(
-    (booking) => !booking.meeting_location && !booking.meeting_url,
-  ).length;
   return (
     <div className="content-stack fade-in">
       <section className="metric-grid">
         <Metric
-          title="Pending requests"
+          title="Pending approval"
           value={pending.length}
           detail="Ready for review"
+          tone="attention"
+        />
+        <Metric
+          title="Awaiting payment"
+          value={awaitingPayment.length}
+          detail="Approved, not yet paid"
           tone="attention"
         />
         <Metric
           title="Confirmed"
           value={confirmed.length}
           detail="Upcoming sessions"
-        />
-        <Metric
-          title="Needs meeting details"
-          value={needsDetails}
-          detail="Before members can join"
         />
         <Metric
           title="Refund requests"
@@ -500,20 +578,30 @@ function BookingsBoard({
   coaches,
   error,
   onUpdate,
+  onDecision,
   onRefund,
 }: {
   bookings: Booking[];
   coaches: DashboardData["coaches"];
   error: string;
   onUpdate: (id: string, changes: BookingChanges) => void;
+  onDecision: (
+    id: string,
+    action: "approve" | "reject",
+    coachId?: string | null,
+  ) => void;
   onRefund: (id: string) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const columns = [
     {
-      title: "Pending",
+      title: "Pending Approval",
       test: (booking: Booking) =>
-        ["requested", "reschedule_requested"].includes(booking.status),
+        ["pending_approval", "reschedule_requested"].includes(booking.status),
+    },
+    {
+      title: "Pending Payment",
+      test: (booking: Booking) => booking.status === "pending_payment",
     },
     {
       title: "Confirmed",
@@ -525,8 +613,11 @@ function BookingsBoard({
         ["requested", "processing"].includes(booking.refund_status ?? ""),
     },
     {
-      title: "Completed",
-      test: (booking: Booking) => booking.status === "completed",
+      title: "Closed",
+      test: (booking: Booking) =>
+        ["completed", "rejected", "expired", "cancelled", "no_show"].includes(
+          booking.status,
+        ),
     },
   ];
   const selected = bookings.find((booking) => booking.id === selectedId);
@@ -538,8 +629,9 @@ function BookingsBoard({
     <div className="content-stack fade-in">
       <div className="section-intro">
         <p>
-          Paid requests appear only after Whop confirms payment. Open a booking
-          to add meeting details, notes, or propose another time.
+          Review every request before payment. Approved paid sessions wait here
+          for the member to pay; meeting details remain private until Whop
+          confirms the charge.
         </p>
       </div>
       {error && <p className="form-error action-error">{error}</p>}
@@ -557,12 +649,12 @@ function BookingsBoard({
               >
                 <div className="ticket-top">
                   <span
-                    className={`health-badge ${booking.status === "confirmed" ? "success" : "warning"}`}
+                    className={`health-badge ${bookingStatusTone(booking.status)}`}
                   >
                     {booking.refund_status &&
                     booking.refund_status !== "not_requested"
                       ? booking.refund_status
-                      : booking.status.replaceAll("_", " ")}
+                      : bookingStatusLabel(booking.status)}
                   </span>
                   <small>{booking.booking_offers?.duration_minutes} min</small>
                 </div>
@@ -572,13 +664,26 @@ function BookingsBoard({
                     booking.confirmed_start_at ?? booking.requested_start_at,
                   )}
                 </p>
+                {booking.status === "pending_payment" &&
+                  booking.payment_due_at && (
+                    <small className="payment-deadline">
+                      Payment due {formatDate(booking.payment_due_at)}
+                    </small>
+                  )}
                 <div className="member-line">
                   <span className="avatar">
                     {bookingMemberInitial(booking)}
                   </span>
                   <span>{bookingMemberLabel(booking)}</span>
                 </div>
-                {column.title !== "Refunds" && (
+                {column.title !== "Refunds" &&
+                  ![
+                    "rejected",
+                    "expired",
+                    "cancelled",
+                    "completed",
+                    "no_show",
+                  ].includes(booking.status) && (
                   <div className="ticket-select">
                     <span>Coach</span>
                     <CustomSelect
@@ -597,24 +702,20 @@ function BookingsBoard({
                 >
                   Open details
                 </button>
-                {["requested", "reschedule_requested"].includes(
+                {["pending_approval", "reschedule_requested"].includes(
                   booking.status,
                 ) && (
                   <div className="ticket-actions">
                     <button
                       className="confirm-button"
                       onClick={() =>
-                        onUpdate(booking.id, { status: "confirmed" })
+                        onDecision(booking.id, "approve", booking.coach_id)
                       }
                     >
-                      <Check size={15} /> Confirm
+                      <Check size={15} /> Approve
                     </button>
-                    <button
-                      onClick={() =>
-                        onUpdate(booking.id, { status: "declined" })
-                      }
-                    >
-                      Decline
+                    <button onClick={() => onDecision(booking.id, "reject")}>
+                      Reject
                     </button>
                   </div>
                 )}
@@ -792,7 +893,13 @@ function BookingDetail({
           <div>
             <span>Payment</span>
             <strong>
-              {booking.whop_payment_id ? "Paid through Whop" : "Free booking"}
+              {booking.whop_payment_id
+                ? "Paid through Whop"
+                : booking.status === "pending_payment"
+                  ? "Approved — awaiting customer payment"
+                  : booking.booking_offers?.access_mode === "paid"
+                    ? "No payment collected"
+                    : "Free booking"}
             </strong>
           </div>
           <div>

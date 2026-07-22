@@ -6,16 +6,487 @@ import { CustomCheckbox } from "@/components/custom-checkbox";
 import { CustomSelect } from "@/components/custom-select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 
-const emptyForm = { title: "", description: "", durationMinutes: 45, pricing: "free" as "free" | "paid", amount: "", status: "published" as "published" | "draft", coachIds: [] as string[], minNoticeHours: 24, maxAdvanceDays: 60, bufferBeforeMinutes: 0, bufferAfterMinutes: 15 };
-export function OfferManager({ companyId, demo, initialOffers, coaches, onOffersChange }: { companyId: string; demo: boolean; initialOffers: Offer[]; coaches: Coach[]; onOffersChange?: (offers: Offer[]) => void }) {
-  const [offers, setOffers] = useState(initialOffers); const [editingId, setEditingId] = useState<string | null>(null); const [open, setOpen] = useState(false); const [form, setForm] = useState(emptyForm); const [saving, setSaving] = useState(false); const [error, setError] = useState(""); const [pendingArchive, setPendingArchive] = useState<Offer | null>(null); const [archiving, setArchiving] = useState(false);
-  function create() { setEditingId(null); setForm(emptyForm); setOpen(true); }
-  function edit(offer: Offer) { setEditingId(offer.id); setForm({ title: offer.title, description: offer.description ?? "", durationMinutes: offer.duration_minutes, pricing: offer.price_cents ? "paid" : "free", amount: offer.price_cents ? String(offer.price_cents / 100) : "", status: offer.status === "draft" ? "draft" : "published", coachIds: offer.coach_ids ?? [], minNoticeHours: offer.min_notice_hours, maxAdvanceDays: offer.max_advance_days, bufferBeforeMinutes: offer.buffer_before_minutes, bufferAfterMinutes: offer.buffer_after_minutes }); setOpen(true); }
-  async function submit(event: React.FormEvent) { event.preventDefault(); setSaving(true); setError(""); try { const body = { companyId, title: form.title, description: form.description, durationMinutes: form.durationMinutes, pricing: form.pricing, priceCents: form.pricing === "paid" ? Math.round(Number(form.amount) * 100) : 0, status: form.status, coachIds: form.coachIds, minNoticeHours: form.minNoticeHours, maxAdvanceDays: form.maxAdvanceDays, bufferBeforeMinutes: form.bufferBeforeMinutes, bufferAfterMinutes: form.bufferAfterMinutes }; let offer: Offer; if (demo) offer = { id: editingId ?? crypto.randomUUID(), whop_company_id: companyId, slug: form.title.toLowerCase().replace(/\W+/g, "-"), title: form.title, description: form.description, duration_minutes: form.durationMinutes, price_cents: body.priceCents, currency: "usd", access_mode: form.pricing, status: form.status, checkout_url: null, requires_manual_confirmation: true, min_notice_hours: form.minNoticeHours, max_advance_days: form.maxAdvanceDays, buffer_before_minutes: form.bufferBeforeMinutes, buffer_after_minutes: form.bufferAfterMinutes, capacity_per_slot: 1, coach_ids: form.coachIds }; else { const response = await fetch(editingId ? `/api/offers/${editingId}` : "/api/offers", { method: editingId ? "PATCH" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }); const payload = await response.json(); if (!response.ok) throw new Error(payload.error); offer = payload.offer; } setOffers((items) => { const next = editingId ? items.map((item) => item.id === editingId ? offer : item) : [...items, offer]; onOffersChange?.(next); return next; }); setOpen(false); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not save offer."); } finally { setSaving(false); } }
-  async function archive() { if (!pendingArchive) return; setArchiving(true); setError(""); try { if (!demo) { const response = await fetch(`/api/offers/${pendingArchive.id}?companyId=${encodeURIComponent(companyId)}`, { method: "DELETE" }); if (!response.ok) { const payload = await response.json(); throw new Error(payload.error || "Could not archive offer."); } } setOffers((items) => { const next = items.filter((item) => item.id !== pendingArchive.id); onOffersChange?.(next); return next; }); setPendingArchive(null); } catch (reason) { setError(reason instanceof Error ? reason.message : "Could not archive offer."); } finally { setArchiving(false); } }
-  return <div className="content-stack fade-in"><header className="section-page-heading split-heading"><div><p className="eyebrow">Products & payments</p><h2>Coaching offers</h2><p>Create the sessions customers can request, with pricing and coach eligibility built in.</p></div><button className="sc-btn-primary" onClick={create}><Plus size={16}/> New offer</button></header>{coaches.length === 0 && <div className="setup-guidance"><Users size={18}/><div><strong>Add a coach before publishing</strong><p>Offers need an active coach and saved availability before customers can choose a valid time.</p></div></div>}<section className="panel offers-management"><div className="offers-list-heading"><span>Offer</span><span>Delivery</span><span>Price</span><span>Status</span><span className="sr-only">Actions</span></div>{offers.length === 0 && <div className="offers-empty"><CircleDollarSignIcon/><strong>No offers yet</strong><p>Create your first free or paid coaching offer.</p><button className="sc-btn-primary" onClick={create}>Create offer</button></div>}{offers.map((offer) => <article className="offer-management-row" key={offer.id}><div className="offer-main"><span className="offer-list-icon">{offer.duration_minutes}</span><div><h3>{offer.title}</h3><p>{offer.description || "No description yet."}</p></div></div><div className="offer-delivery"><span><Clock3 size={14}/>{offer.duration_minutes} minutes</span><span><Users size={14}/>{offer.coach_ids?.length ? `${offer.coach_ids.length} assigned` : "Any coach"}</span></div><strong className="offer-list-price">{offer.price_cents ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(offer.price_cents / 100) : "Free"}</strong><span className={`status-badge ${offer.status}`}>{offer.status}</span><div className="manage-actions offer-row-actions"><button onClick={() => edit(offer)}><Pencil size={14}/> Edit</button><button className="danger-link" onClick={() => setPendingArchive(offer)} aria-label={`Archive ${offer.title}`}><Trash2 size={14}/></button></div></article>)}</section>
-    {open && <div className="modal-backdrop"><form className="modal sc-card offer-modal" onSubmit={submit}><div className="panel-heading"><div><p className="eyebrow">Coaching product</p><h2>{editingId ? "Edit offer" : "Create offer"}</h2><p>Set the customer-facing details and booking rules.</p></div><button type="button" className="icon-button" onClick={() => setOpen(false)}><X size={18}/></button></div><section className="form-section"><div className="form-section-heading"><strong>Offer details</strong><span>What customers will see before requesting.</span></div><div className="field"><label>Offer name</label><input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} required/></div><div className="field"><label>Description</label><textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })}/></div><div className="form-grid"><div className="field"><label>Duration (minutes)</label><input type="number" min="5" value={form.durationMinutes} onChange={(event) => setForm({ ...form, durationMinutes: Number(event.target.value) })}/></div><div className="field"><label>Visibility</label><CustomSelect value={form.status} options={[{ value: "published", label: "Published" }, { value: "draft", label: "Draft" }]} onChange={(value) => setForm({ ...form, status: value as "draft" | "published" })}/></div></div></section><section className="form-section"><div className="form-section-heading"><strong>Pricing</strong><span>Paid offers use Whop checkout before entering your queue.</span></div><div className="choice-row pricing-choice"><button type="button" className={form.pricing === "free" ? "active" : ""} onClick={() => setForm({ ...form, pricing: "free" })}>Free</button><button type="button" className={form.pricing === "paid" ? "active" : ""} onClick={() => setForm({ ...form, pricing: "paid" })}>Paid</button></div>{form.pricing === "paid" && <div className="field"><label>Amount (USD)</label><input type="number" min="0.50" step="0.01" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} required/></div>}</section><section className="form-section"><div className="form-section-heading"><strong>Booking rules</strong><span>Control notice, booking range, and breathing room.</span></div><div className="form-grid"><div className="field"><label>Minimum notice (hours)</label><input type="number" min="0" value={form.minNoticeHours} onChange={(event) => setForm({ ...form, minNoticeHours: Number(event.target.value) })}/></div><div className="field"><label>Maximum advance (days)</label><input type="number" min="1" value={form.maxAdvanceDays} onChange={(event) => setForm({ ...form, maxAdvanceDays: Number(event.target.value) })}/></div></div><div className="form-grid"><div className="field"><label>Buffer before (minutes)</label><input type="number" min="0" value={form.bufferBeforeMinutes} onChange={(event) => setForm({ ...form, bufferBeforeMinutes: Number(event.target.value) })}/></div><div className="field"><label>Buffer after (minutes)</label><input type="number" min="0" value={form.bufferAfterMinutes} onChange={(event) => setForm({ ...form, bufferAfterMinutes: Number(event.target.value) })}/></div></div></section><section className="form-section"><div className="form-section-heading"><strong>Eligible coaches</strong><span>Leave every coach unchecked to allow anyone active.</span></div><div className="coach-checkbox-grid">{coaches.map((coach) => <CustomCheckbox key={coach.id} checked={form.coachIds.includes(coach.id)} onChange={(checked) => setForm({ ...form, coachIds: checked ? [...form.coachIds, coach.id] : form.coachIds.filter((id) => id !== coach.id) })} label={coach.name} description={coach.bio ?? coach.timezone}/>)}</div></section>{error && <p className="form-error">{error}</p>}<div className="modal-actions sticky-modal-actions"><button type="button" className="sc-btn-secondary" onClick={() => setOpen(false)}>Cancel</button><button className="sc-btn-primary" disabled={saving}>{saving ? "Saving…" : "Save offer"}</button></div></form></div>}
-    {pendingArchive && <ConfirmDialog title={`Archive “${pendingArchive.title}”?`} description="This removes the offer from the customer page immediately. Existing booking history stays intact." confirmLabel="Archive offer" busy={archiving} onClose={() => setPendingArchive(null)} onConfirm={archive}/>}</div>;
+const emptyForm = {
+  title: "",
+  description: "",
+  durationMinutes: 45,
+  pricing: "free" as "free" | "paid",
+  amount: "",
+  status: "published" as "published" | "draft",
+  coachIds: [] as string[],
+  minNoticeHours: 24,
+  maxAdvanceDays: 60,
+  bufferBeforeMinutes: 0,
+  bufferAfterMinutes: 15,
+};
+export function OfferManager({
+  companyId,
+  demo,
+  initialOffers,
+  coaches,
+  onOffersChange,
+}: {
+  companyId: string;
+  demo: boolean;
+  initialOffers: Offer[];
+  coaches: Coach[];
+  onOffersChange?: (offers: Offer[]) => void;
+}) {
+  const [offers, setOffers] = useState(initialOffers);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [pendingArchive, setPendingArchive] = useState<Offer | null>(null);
+  const [archiving, setArchiving] = useState(false);
+  function create() {
+    setEditingId(null);
+    setForm(emptyForm);
+    setOpen(true);
+  }
+  function edit(offer: Offer) {
+    setEditingId(offer.id);
+    setForm({
+      title: offer.title,
+      description: offer.description ?? "",
+      durationMinutes: offer.duration_minutes,
+      pricing: offer.price_cents ? "paid" : "free",
+      amount: offer.price_cents ? String(offer.price_cents / 100) : "",
+      status: offer.status === "draft" ? "draft" : "published",
+      coachIds: offer.coach_ids ?? [],
+      minNoticeHours: offer.min_notice_hours,
+      maxAdvanceDays: offer.max_advance_days,
+      bufferBeforeMinutes: offer.buffer_before_minutes,
+      bufferAfterMinutes: offer.buffer_after_minutes,
+    });
+    setOpen(true);
+  }
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      const body = {
+        companyId,
+        title: form.title,
+        description: form.description,
+        durationMinutes: form.durationMinutes,
+        pricing: form.pricing,
+        priceCents:
+          form.pricing === "paid" ? Math.round(Number(form.amount) * 100) : 0,
+        status: form.status,
+        coachIds: form.coachIds,
+        minNoticeHours: form.minNoticeHours,
+        maxAdvanceDays: form.maxAdvanceDays,
+        bufferBeforeMinutes: form.bufferBeforeMinutes,
+        bufferAfterMinutes: form.bufferAfterMinutes,
+      };
+      let offer: Offer;
+      if (demo)
+        offer = {
+          id: editingId ?? crypto.randomUUID(),
+          whop_company_id: companyId,
+          slug: form.title.toLowerCase().replace(/\W+/g, "-"),
+          title: form.title,
+          description: form.description,
+          duration_minutes: form.durationMinutes,
+          price_cents: body.priceCents,
+          currency: "usd",
+          access_mode: form.pricing,
+          status: form.status,
+          checkout_url: null,
+          requires_manual_confirmation: true,
+          min_notice_hours: form.minNoticeHours,
+          max_advance_days: form.maxAdvanceDays,
+          buffer_before_minutes: form.bufferBeforeMinutes,
+          buffer_after_minutes: form.bufferAfterMinutes,
+          capacity_per_slot: 1,
+          coach_ids: form.coachIds,
+        };
+      else {
+        const response = await fetch(
+          editingId ? `/api/offers/${editingId}` : "/api/offers",
+          {
+            method: editingId ? "PATCH" : "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+          },
+        );
+        const payload = await response.json();
+        if (!response.ok) throw new Error(payload.error);
+        offer = payload.offer;
+      }
+      setOffers((items) => {
+        const next = editingId
+          ? items.map((item) => (item.id === editingId ? offer : item))
+          : [...items, offer];
+        onOffersChange?.(next);
+        return next;
+      });
+      setOpen(false);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Could not save offer.",
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function archive() {
+    if (!pendingArchive) return;
+    setArchiving(true);
+    setError("");
+    try {
+      if (!demo) {
+        const response = await fetch(
+          `/api/offers/${pendingArchive.id}?companyId=${encodeURIComponent(companyId)}`,
+          { method: "DELETE" },
+        );
+        if (!response.ok) {
+          const payload = await response.json();
+          throw new Error(payload.error || "Could not archive offer.");
+        }
+      }
+      setOffers((items) => {
+        const next = items.filter((item) => item.id !== pendingArchive.id);
+        onOffersChange?.(next);
+        return next;
+      });
+      setPendingArchive(null);
+    } catch (reason) {
+      setError(
+        reason instanceof Error ? reason.message : "Could not archive offer.",
+      );
+    } finally {
+      setArchiving(false);
+    }
+  }
+  return (
+    <div className="content-stack fade-in">
+      <header className="section-page-heading split-heading">
+        <div>
+          <p className="eyebrow">Products & payments</p>
+          <h2>Coaching offers</h2>
+          <p>
+            Create the sessions customers can request, with pricing and coach
+            eligibility built in.
+          </p>
+        </div>
+        <button className="sc-btn-primary" onClick={create}>
+          <Plus size={16} /> New offer
+        </button>
+      </header>
+      {coaches.length === 0 && (
+        <div className="setup-guidance">
+          <Users size={18} />
+          <div>
+            <strong>Add a coach before publishing</strong>
+            <p>
+              Offers need an active coach and saved availability before
+              customers can choose a valid time.
+            </p>
+          </div>
+        </div>
+      )}
+      <section className="panel offers-management">
+        <div className="offers-list-heading">
+          <span>Offer</span>
+          <span>Delivery</span>
+          <span>Price</span>
+          <span>Status</span>
+          <span className="sr-only">Actions</span>
+        </div>
+        {offers.length === 0 && (
+          <div className="offers-empty">
+            <CircleDollarSignIcon />
+            <strong>No offers yet</strong>
+            <p>Create your first free or paid coaching offer.</p>
+            <button className="sc-btn-primary" onClick={create}>
+              Create offer
+            </button>
+          </div>
+        )}
+        {offers.map((offer) => (
+          <article className="offer-management-row" key={offer.id}>
+            <div className="offer-main">
+              <span className="offer-list-icon">{offer.duration_minutes}</span>
+              <div>
+                <h3>{offer.title}</h3>
+                <p>{offer.description || "No description yet."}</p>
+              </div>
+            </div>
+            <div className="offer-delivery">
+              <span>
+                <Clock3 size={14} />
+                {offer.duration_minutes} minutes
+              </span>
+              <span>
+                <Users size={14} />
+                {offer.coach_ids?.length
+                  ? `${offer.coach_ids.length} assigned`
+                  : "Any coach"}
+              </span>
+            </div>
+            <strong className="offer-list-price">
+              {offer.price_cents
+                ? new Intl.NumberFormat("en-US", {
+                    style: "currency",
+                    currency: "USD",
+                  }).format(offer.price_cents / 100)
+                : "Free"}
+            </strong>
+            <span className={`status-badge ${offer.status}`}>
+              {offer.status}
+            </span>
+            <div className="manage-actions offer-row-actions">
+              <button onClick={() => edit(offer)}>
+                <Pencil size={14} /> Edit
+              </button>
+              <button
+                className="danger-link"
+                onClick={() => setPendingArchive(offer)}
+                aria-label={`Archive ${offer.title}`}
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          </article>
+        ))}
+      </section>
+      {open && (
+        <div className="modal-backdrop">
+          <form className="modal sc-card offer-modal" onSubmit={submit}>
+            <div className="panel-heading">
+              <div>
+                <p className="eyebrow">Coaching product</p>
+                <h2>{editingId ? "Edit offer" : "Create offer"}</h2>
+                <p>Set the customer-facing details and booking rules.</p>
+              </div>
+              <button
+                type="button"
+                className="icon-button"
+                onClick={() => setOpen(false)}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <section className="form-section">
+              <div className="form-section-heading">
+                <strong>Offer details</strong>
+                <span>What customers will see before requesting.</span>
+              </div>
+              <div className="field">
+                <label>Offer name</label>
+                <input
+                  value={form.title}
+                  onChange={(event) =>
+                    setForm({ ...form, title: event.target.value })
+                  }
+                  required
+                />
+              </div>
+              <div className="field">
+                <label>Description</label>
+                <textarea
+                  value={form.description}
+                  onChange={(event) =>
+                    setForm({ ...form, description: event.target.value })
+                  }
+                />
+              </div>
+              <div className="form-grid">
+                <div className="field">
+                  <label>Duration (minutes)</label>
+                  <input
+                    type="number"
+                    min="5"
+                    value={form.durationMinutes}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        durationMinutes: Number(event.target.value),
+                      })
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label>Visibility</label>
+                  <CustomSelect
+                    value={form.status}
+                    options={[
+                      { value: "published", label: "Published" },
+                      { value: "draft", label: "Draft" },
+                    ]}
+                    onChange={(value) =>
+                      setForm({
+                        ...form,
+                        status: value as "draft" | "published",
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </section>
+            <section className="form-section">
+              <div className="form-section-heading">
+                <strong>Pricing</strong>
+                <span>
+                  Paid offers request payment only after you approve the booking.
+                </span>
+              </div>
+              <div className="choice-row pricing-choice">
+                <button
+                  type="button"
+                  className={form.pricing === "free" ? "active" : ""}
+                  onClick={() => setForm({ ...form, pricing: "free" })}
+                >
+                  Free
+                </button>
+                <button
+                  type="button"
+                  className={form.pricing === "paid" ? "active" : ""}
+                  onClick={() => setForm({ ...form, pricing: "paid" })}
+                >
+                  Paid
+                </button>
+              </div>
+              {form.pricing === "paid" && (
+                <div className="field">
+                  <label>Amount (USD)</label>
+                  <input
+                    type="number"
+                    min="0.50"
+                    step="0.01"
+                    value={form.amount}
+                    onChange={(event) =>
+                      setForm({ ...form, amount: event.target.value })
+                    }
+                    required
+                  />
+                </div>
+              )}
+            </section>
+            <section className="form-section">
+              <div className="form-section-heading">
+                <strong>Booking rules</strong>
+                <span>Control notice, booking range, and breathing room.</span>
+              </div>
+              <div className="form-grid">
+                <div className="field">
+                  <label>Minimum notice (hours)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.minNoticeHours}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        minNoticeHours: Number(event.target.value),
+                      })
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label>Maximum advance (days)</label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={form.maxAdvanceDays}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        maxAdvanceDays: Number(event.target.value),
+                      })
+                    }
+                  />
+                </div>
+              </div>
+              <div className="form-grid">
+                <div className="field">
+                  <label>Buffer before (minutes)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.bufferBeforeMinutes}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        bufferBeforeMinutes: Number(event.target.value),
+                      })
+                    }
+                  />
+                </div>
+                <div className="field">
+                  <label>Buffer after (minutes)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={form.bufferAfterMinutes}
+                    onChange={(event) =>
+                      setForm({
+                        ...form,
+                        bufferAfterMinutes: Number(event.target.value),
+                      })
+                    }
+                  />
+                </div>
+              </div>
+            </section>
+            <section className="form-section">
+              <div className="form-section-heading">
+                <strong>Eligible coaches</strong>
+                <span>Leave every coach unchecked to allow anyone active.</span>
+              </div>
+              <div className="coach-checkbox-grid">
+                {coaches.map((coach) => (
+                  <CustomCheckbox
+                    key={coach.id}
+                    checked={form.coachIds.includes(coach.id)}
+                    onChange={(checked) =>
+                      setForm({
+                        ...form,
+                        coachIds: checked
+                          ? [...form.coachIds, coach.id]
+                          : form.coachIds.filter((id) => id !== coach.id),
+                      })
+                    }
+                    label={coach.name}
+                    description={coach.bio ?? coach.timezone}
+                  />
+                ))}
+              </div>
+            </section>
+            {error && <p className="form-error">{error}</p>}
+            <div className="modal-actions sticky-modal-actions">
+              <button
+                type="button"
+                className="sc-btn-secondary"
+                onClick={() => setOpen(false)}
+              >
+                Cancel
+              </button>
+              <button className="sc-btn-primary" disabled={saving}>
+                {saving ? "Saving…" : "Save offer"}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+      {pendingArchive && (
+        <ConfirmDialog
+          title={`Archive “${pendingArchive.title}”?`}
+          description="This removes the offer from the customer page immediately. Existing booking history stays intact."
+          confirmLabel="Archive offer"
+          busy={archiving}
+          onClose={() => setPendingArchive(null)}
+          onConfirm={archive}
+        />
+      )}
+    </div>
+  );
 }
 
-function CircleDollarSignIcon() { return <span className="offer-empty-icon">$</span>; }
+function CircleDollarSignIcon() {
+  return <span className="offer-empty-icon">$</span>;
+}

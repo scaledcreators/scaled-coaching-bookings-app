@@ -53,6 +53,7 @@ export async function getCompanyData(
 ): Promise<DashboardData> {
   if (!isSupabaseConfigured()) return { ...demoData, companyId };
   const supabase = getSupabaseAdmin();
+  await supabase.rpc("expire_overdue_booking_requests");
 
   const [
     offers,
@@ -71,7 +72,9 @@ export async function getCompanyData(
       .order("created_at"),
     supabase
       .from("booking_requests")
-      .select("*, booking_offers(title,duration_minutes)")
+      .select(
+        "*, booking_offers(title,duration_minutes,price_cents,access_mode)",
+      )
       .eq("whop_company_id", companyId)
       .order("created_at", { ascending: false })
       .limit(100),

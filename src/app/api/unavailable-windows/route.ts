@@ -29,7 +29,12 @@ export async function POST(request: Request) {
     const { data: conflicts, error: conflictError } = await supabase.from("booking_requests")
       .select("id,status,requested_start_at,confirmed_start_at")
       .eq("whop_company_id", input.companyId)
-      .in("status", ["requested", "confirmed", "reschedule_requested"])
+      .in("status", [
+        "pending_approval",
+        "pending_payment",
+        "confirmed",
+        "reschedule_requested",
+      ])
       .lt("requested_start_at", input.endsAt)
       .gt("requested_end_at", input.startsAt);
     if (conflictError) throw conflictError;

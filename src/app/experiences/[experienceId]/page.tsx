@@ -13,8 +13,29 @@ export default async function ExperiencePage({ params, searchParams }: PageProps
   const memberData = {
     ...data,
     bookings: data.bookings
-      .filter((booking) => booking.whop_user_id === viewer.userId)
-      .map((booking) => ({ ...booking, admin_note: null })),
+      .filter(
+        (booking) =>
+          booking.whop_user_id === viewer.userId &&
+          booking.whop_experience_id === experienceId,
+      )
+      .map((booking) => {
+        const releaseMeetingDetails = [
+          "confirmed",
+          "completed",
+          "no_show",
+        ].includes(booking.status);
+        return {
+          ...booking,
+          admin_note: null,
+          meeting_location: releaseMeetingDetails
+            ? booking.meeting_location
+            : null,
+          meeting_url: releaseMeetingDetails ? booking.meeting_url : null,
+          manual_join_instructions: releaseMeetingDetails
+            ? booking.manual_join_instructions
+            : null,
+        };
+      }),
   };
   return <MemberExperience experienceId={experienceId} userId={viewer.userId} data={memberData} checkoutComplete={query.checkout === "complete"} />;
 }

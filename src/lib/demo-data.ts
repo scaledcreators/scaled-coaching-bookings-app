@@ -128,9 +128,10 @@ export const demoData: DashboardData = {
       id: "booking_1",
       whop_company_id: companyId,
       whop_user_id: "user_avery",
+      whop_experience_id: "exp_demo",
       offer_id: "offer_strategy",
       coach_id: "coach_graham",
-      status: "requested",
+      status: "pending_approval",
       requested_start_at: hours(28),
       requested_end_at: hours(28.75),
       confirmed_start_at: null,
@@ -146,12 +147,15 @@ export const demoData: DashboardData = {
       booking_offers: {
         title: "Creator Strategy Session",
         duration_minutes: 45,
+        price_cents: 25000,
+        access_mode: "paid",
       },
     },
     {
       id: "booking_2",
       whop_company_id: companyId,
       whop_user_id: "user_demo_member",
+      whop_experience_id: "exp_demo",
       offer_id: "offer_audit",
       coach_id: "coach_maya",
       status: "confirmed",
@@ -168,7 +172,12 @@ export const demoData: DashboardData = {
       manual_join_instructions:
         "Open the private coaching voice channel five minutes before start.",
       created_at: hours(-30),
-      booking_offers: { title: "Offer & Funnel Audit", duration_minutes: 60 },
+      booking_offers: {
+        title: "Offer & Funnel Audit",
+        duration_minutes: 60,
+        price_cents: 35000,
+        access_mode: "paid",
+      },
     },
   ],
   unavailable: [

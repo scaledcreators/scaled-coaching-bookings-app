@@ -16,7 +16,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (["processing", "refunded"].includes(booking.refund_status)) return Response.json({ error: "This payment is already being refunded." }, { status: 409 });
     await whop.payments.refund(booking.whop_payment_id);
     const now = new Date().toISOString();
-    const { data, error: updateError } = await supabase.from("booking_requests").update({ status: "cancelled", refund_status: "processing", updated_at: now }).eq("id", id).select("*, booking_offers(title,duration_minutes)").single();
+    const { data, error: updateError } = await supabase.from("booking_requests").update({ status: "cancelled", refund_status: "processing", updated_at: now }).eq("id", id).select("*, booking_offers(title,duration_minutes,price_cents,access_mode)").single();
     if (updateError) throw updateError;
     await supabase.from("booking_messages").insert({ booking_request_id: id, sender: "admin", body: "A full refund was issued through Whop." });
     return Response.json({ booking: data });
