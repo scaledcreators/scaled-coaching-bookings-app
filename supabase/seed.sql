@@ -1,9 +1,7 @@
--- Replace these demo Whop IDs after creating the app and experience in Whop.
+-- Optional sample content only. Production installations are discovered from
+-- Whop automatically and do not require this file.
 insert into public.booking_settings (whop_company_id, default_timezone)
 values ('biz_replace_me', 'America/Chicago') on conflict do nothing;
-
-insert into public.experience_installations (experience_id, whop_company_id)
-values ('exp_replace_me', 'biz_replace_me') on conflict (experience_id) do update set whop_company_id = excluded.whop_company_id;
 
 with coach as (
   insert into public.coaches (whop_company_id, name, bio, timezone)
