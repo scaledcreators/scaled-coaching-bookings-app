@@ -12,6 +12,49 @@ const schema = z.object({
   timezone: z.string().min(1).max(100), intakeAnswers: z.record(z.string(), z.unknown()).default({}), memberNote: z.string().max(2000).optional().default(""),
 });
 
+function asSecureOrigin(value: string | undefined) {
+  const raw = value?.trim();
+  if (!raw) return null;
+
+  try {
+    const candidate = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+    const url = new URL(candidate);
+    return url.protocol === "https:" && url.hostname ? url.origin : null;
+  } catch {
+    return null;
+  }
+}
+
+function checkoutReturnOrigin(request: Request) {
+  const requestOrigin = new URL(request.url).origin;
+  const candidates = [
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+    process.env.VERCEL_URL,
+    requestOrigin,
+  ];
+
+  for (const candidate of candidates) {
+    const origin = asSecureOrigin(candidate);
+    if (origin) return origin;
+  }
+
+  throw new Error("A secure HTTPS app URL is required to start checkout.");
+}
+
+function checkoutErrorMessage(error: unknown) {
+  if (!(error instanceof Error)) return "Whop checkout could not be started.";
+
+  try {
+    const payload = JSON.parse(error.message) as {
+      error?: { message?: string };
+    };
+    return payload.error?.message || error.message;
+  } catch {
+    return error.message;
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const input = schema.parse(await request.json());
@@ -62,16 +105,53 @@ export async function POST(request: Request) {
     await supabase.from("booking_messages").insert({ booking_request_id: booking.id, sender: "system", body: paid ? "Booking request created; awaiting Whop payment." : "Booking request submitted." });
 
     if (!paid) return Response.json({ booking }, { status: 201 });
-    if (!process.env.WHOP_API_KEY) throw new Error("Whop checkout is not configured.");
-    const redirectBase = process.env.NEXT_PUBLIC_APP_URL || new URL(request.url).origin;
-    const checkout = await whop.checkoutConfigurations.create({
-      company_id: input.companyId,
-      plan: offer.whop_plan_id ? undefined : { company_id: input.companyId, initial_price: offer.price_cents / 100, currency: offer.currency, plan_type: "one_time", title: offer.title, description: offer.description, product_id: offer.whop_product_id || undefined },
-      plan_id: offer.whop_plan_id || undefined,
-      redirect_url: `${redirectBase}/experiences/${input.experienceId}?checkout=complete`,
-      metadata: { offer_id: offer.id, booking_request_id: booking.id, whop_company_id: input.companyId, whop_user_id: viewer.userId },
-    });
-    await supabase.from("booking_requests").update({ whop_checkout_configuration_id: checkout.id }).eq("id", booking.id);
+
+    let checkout;
+    try {
+      if (!process.env.WHOP_API_KEY) {
+        throw new Error("Whop checkout is not configured.");
+      }
+
+      const redirectBase = checkoutReturnOrigin(request);
+      const redirectUrl = new URL(
+        `/experiences/${encodeURIComponent(input.experienceId)}?checkout=complete`,
+        redirectBase,
+      ).toString();
+
+      checkout = await whop.checkoutConfigurations.create({
+        company_id: input.companyId,
+        plan: offer.whop_plan_id ? undefined : { company_id: input.companyId, initial_price: offer.price_cents / 100, currency: offer.currency, plan_type: "one_time", title: offer.title, description: offer.description, product_id: offer.whop_product_id || undefined },
+        plan_id: offer.whop_plan_id || undefined,
+        redirect_url: redirectUrl,
+        metadata: { offer_id: offer.id, booking_request_id: booking.id, whop_company_id: input.companyId, whop_user_id: viewer.userId },
+      });
+    } catch (checkoutError) {
+      const message = checkoutErrorMessage(checkoutError);
+      const now = new Date().toISOString();
+      await Promise.all([
+        supabase
+          .from("booking_requests")
+          .update({
+            status: "cancelled",
+            admin_note: `Checkout was not created: ${message}`,
+            updated_at: now,
+          })
+          .eq("id", booking.id)
+          .eq("status", "pending_payment"),
+        supabase.from("booking_messages").insert({
+          booking_request_id: booking.id,
+          sender: "system",
+          body: "Checkout could not be started. No payment was collected.",
+        }),
+      ]);
+      throw new Error(message);
+    }
+
+    const { error: checkoutLinkError } = await supabase
+      .from("booking_requests")
+      .update({ whop_checkout_configuration_id: checkout.id })
+      .eq("id", booking.id);
+    if (checkoutLinkError) throw checkoutLinkError;
     return Response.json({ booking, checkoutUrl: checkout.purchase_url }, { status: 201 });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Could not create booking request." }, { status: 400 });
