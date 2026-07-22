@@ -39,3 +39,13 @@ export async function POST(request: Request) {
     return Response.json({ error: message }, { status: message.includes("access") || message.includes("Admin") ? 403 : 400 });
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const url = new URL(request.url); const companyId = url.searchParams.get("companyId"); const id = url.searchParams.get("id");
+    if (!companyId || !id) return Response.json({ error: "companyId and id are required." }, { status: 400 });
+    await requireRequestViewer(request, companyId, true);
+    const { error } = await getSupabaseAdmin().from("unavailable_windows").update({ status: "cancelled", updated_at: new Date().toISOString() }).eq("id", id).eq("whop_company_id", companyId);
+    if (error) throw error; return new Response(null, { status: 204 });
+  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Could not remove unavailable window." }, { status: 400 }); }
+}

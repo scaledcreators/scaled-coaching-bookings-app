@@ -8,6 +8,11 @@ export const demoData: DashboardData = {
   companyId,
   demo: true,
   emergencyPaused: false,
+  settings: { emergency_paused: false, default_timezone: "America/Chicago", support_contact: "support@scaledcreators.com" },
+  availability: [1,2,3,4,5].flatMap((weekday) => [
+    { id: `rule_graham_${weekday}`, whop_company_id: companyId, coach_id: "coach_graham", offer_id: null, weekday, start_time: "09:00:00", end_time: "17:00:00", timezone: "America/Chicago", status: "active" as const },
+    { id: `rule_maya_${weekday}`, whop_company_id: companyId, coach_id: "coach_maya", offer_id: null, weekday, start_time: "10:00:00", end_time: "16:00:00", timezone: "America/Chicago", status: "active" as const },
+  ]),
   coaches: [
     { id: "coach_graham", whop_company_id: companyId, name: "Graham Lee", bio: "Growth strategy and creator systems", timezone: "America/Chicago", status: "active" },
     { id: "coach_maya", whop_company_id: companyId, name: "Maya Chen", bio: "Offer positioning and conversion", timezone: "America/Chicago", status: "active" },

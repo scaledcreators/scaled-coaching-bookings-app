@@ -7,15 +7,16 @@ export async function getCompanyData(companyId: string): Promise<DashboardData> 
   if (!isSupabaseConfigured()) return { ...demoData, companyId };
   const supabase = getSupabaseAdmin();
 
-  const [offers, bookings, unavailable, coaches, settings] = await Promise.all([
+  const [offers, bookings, unavailable, coaches, availability, settings] = await Promise.all([
     supabase.from("booking_offers").select("*").eq("whop_company_id", companyId).neq("status", "archived").order("created_at"),
     supabase.from("booking_requests").select("*, booking_offers(title,duration_minutes)").eq("whop_company_id", companyId).order("created_at", { ascending: false }).limit(100),
     supabase.from("unavailable_windows").select("*").eq("whop_company_id", companyId).eq("status", "active").order("starts_at"),
     supabase.from("coaches").select("*").eq("whop_company_id", companyId).neq("status", "archived").order("name"),
-    supabase.from("booking_settings").select("emergency_paused").eq("whop_company_id", companyId).maybeSingle(),
+    supabase.from("availability_rules").select("*").eq("whop_company_id", companyId).eq("status", "active").order("weekday"),
+    supabase.from("booking_settings").select("emergency_paused,default_timezone,support_contact").eq("whop_company_id", companyId).maybeSingle(),
   ]);
 
-  for (const result of [offers, bookings, unavailable, coaches, settings]) {
+  for (const result of [offers, bookings, unavailable, coaches, availability, settings]) {
     if (result.error) throw result.error;
   }
 
@@ -35,6 +36,8 @@ export async function getCompanyData(companyId: string): Promise<DashboardData> 
     bookings: bookings.data ?? [],
     unavailable: unavailable.data ?? [],
     coaches: coaches.data ?? [],
+    availability: availability.data ?? [],
+    settings: settings.data ?? { emergency_paused: false, default_timezone: "America/Chicago", support_contact: null },
     emergencyPaused: settings.data?.emergency_paused ?? false,
     demo: false,
   } as DashboardData;

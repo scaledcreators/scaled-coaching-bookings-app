@@ -7,7 +7,7 @@ export const offerInput = z.object({
   description: z.string().trim().max(2000).optional().default(""), durationMinutes: z.number().int().min(5).max(1440),
   pricing: z.enum(["free", "paid"]), priceCents: z.number().int().min(0), status: z.enum(["draft", "published"]).default("published"),
   coachIds: z.array(z.string().uuid()).default([]), minNoticeHours: z.number().int().min(0).default(24),
-  bufferAfterMinutes: z.number().int().min(0).default(15),
+  maxAdvanceDays: z.number().int().min(1).default(60), bufferBeforeMinutes: z.number().int().min(0).default(0), bufferAfterMinutes: z.number().int().min(0).default(15),
 }).superRefine((value, ctx) => { if (value.pricing === "paid" && value.priceCents < 50) ctx.addIssue({ code: "custom", path: ["priceCents"], message: "Paid offers need an amount of at least $0.50." }); });
 
 export async function POST(request: Request) {
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       whop_company_id: input.companyId, title: input.title, slug, description: input.description || null,
       duration_minutes: input.durationMinutes, price_cents: input.pricing === "paid" ? input.priceCents : 0,
       currency: "usd", access_mode: input.pricing, status: input.status, requires_manual_confirmation: true,
-      min_notice_hours: input.minNoticeHours, buffer_after_minutes: input.bufferAfterMinutes,
+      min_notice_hours: input.minNoticeHours, max_advance_days: input.maxAdvanceDays, buffer_before_minutes: input.bufferBeforeMinutes, buffer_after_minutes: input.bufferAfterMinutes,
     }).select("*").single();
     if (error) throw error;
     if (input.coachIds.length) {

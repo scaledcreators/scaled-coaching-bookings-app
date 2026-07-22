@@ -70,12 +70,32 @@ export type Coach = {
   status: "active" | "hidden" | "archived";
 };
 
+export type AvailabilityRule = {
+  id: string;
+  whop_company_id: string;
+  coach_id: string | null;
+  offer_id: string | null;
+  weekday: number;
+  start_time: string;
+  end_time: string;
+  timezone: string;
+  status: "active" | "disabled";
+};
+
+export type BookingSettings = {
+  emergency_paused: boolean;
+  default_timezone: string;
+  support_contact: string | null;
+};
+
 export type DashboardData = {
   companyId: string;
   offers: Offer[];
   bookings: Booking[];
   unavailable: UnavailableWindow[];
   coaches: Coach[];
+  availability: AvailabilityRule[];
+  settings: BookingSettings;
   emergencyPaused: boolean;
   demo: boolean;
 };
