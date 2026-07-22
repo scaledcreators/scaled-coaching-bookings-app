@@ -112,6 +112,10 @@ button {
   color: var(--text-2);
   font-size: 8px;
 }
+.landing-brand small b {
+  color: var(--text);
+  font-weight: 800;
+}
 .muted {
   color: var(--text-2);
 }
@@ -335,6 +339,10 @@ button:disabled {
   line-height: 1.25;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.app-brand-copy small b {
+  color: var(--text);
+  font-weight: 800;
 }
 .side-nav {
   display: grid;

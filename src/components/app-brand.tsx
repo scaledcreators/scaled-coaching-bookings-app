@@ -25,7 +25,7 @@ export function AppBrand({
       )}
       <div className="app-brand-copy">
         <strong>{settings.display_name}</strong>
-        <small>Created by &ldquo;Scaled Creators&rdquo;</small>
+        <small>Created by <b>Scaled Creators</b></small>
       </div>
     </div>
   );

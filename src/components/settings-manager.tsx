@@ -256,8 +256,7 @@ export function SettingsManager({
                   required
                 />
                 <small className="field-help">
-                  The “Created by &ldquo;Scaled Creators&rdquo;” credit always appears
-                  underneath.
+                  The Created by Scaled Creators credit always appears underneath.
                 </small>
               </div>
             </div>

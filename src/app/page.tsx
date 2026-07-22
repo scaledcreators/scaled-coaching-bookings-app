@@ -5,7 +5,7 @@ export default function Home() {
   return (
     <main className="theme-root landing">
       <nav className="nav landing-nav">
-        <Link className="landing-brand" href="/"><strong>Coaching Bookings</strong><small>Created by &ldquo;Scaled Creators&rdquo;</small></Link>
+        <Link className="landing-brand" href="/"><strong>Coaching Bookings</strong><small>Created by <b>Scaled Creators</b></small></Link>
         <span className="status-badge active">Whop native</span>
       </nav>
       <section className="landing-hero">
