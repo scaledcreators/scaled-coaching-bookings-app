@@ -29,7 +29,7 @@ export function OfferManager({
   initialOffers: Offer[];
   onOffersChange?: (offers: Offer[]) => void;
 }) {
-  const [offers, setOffers] = useState(initialOffers);
+  const offers = initialOffers;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -111,13 +111,10 @@ export function OfferManager({
         if (!response.ok) throw new Error(payload.error);
         offer = payload.offer;
       }
-      setOffers((items) => {
-        const next = editingId
-          ? items.map((item) => (item.id === editingId ? offer : item))
-          : [...items, offer];
-        onOffersChange?.(next);
-        return next;
-      });
+      const next = editingId
+        ? offers.map((item) => (item.id === editingId ? offer : item))
+        : [...offers, offer];
+      onOffersChange?.(next);
       setOpen(false);
     } catch (reason) {
       setError(
@@ -142,11 +139,9 @@ export function OfferManager({
           throw new Error(payload.error || "Could not archive offer.");
         }
       }
-      setOffers((items) => {
-        const next = items.filter((item) => item.id !== pendingArchive.id);
-        onOffersChange?.(next);
-        return next;
-      });
+      onOffersChange?.(
+        offers.filter((item) => item.id !== pendingArchive.id),
+      );
       setPendingArchive(null);
     } catch (reason) {
       setError(

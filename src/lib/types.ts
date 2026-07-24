@@ -57,6 +57,8 @@ export type Booking = {
   approved_at?: string | null;
   rejected_at?: string | null;
   expired_at?: string | null;
+  admin_archived_at?: string | null;
+  admin_archived_by?: string | null;
   refund_status?:
     | "not_requested"
     | "requested"

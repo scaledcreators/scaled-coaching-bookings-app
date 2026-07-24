@@ -6,6 +6,12 @@ export function bookingMemberLabel(booking: Booking) {
   return booking.whop_user_id;
 }
 
+export function bookingMemberUsername(booking: Booking) {
+  return booking.member_profile?.username
+    ? `@${booking.member_profile.username}`
+    : null;
+}
+
 export function bookingMemberInitial(booking: Booking) {
   return bookingMemberLabel(booking).replace(/^@/, "").slice(0, 1).toUpperCase();
 }

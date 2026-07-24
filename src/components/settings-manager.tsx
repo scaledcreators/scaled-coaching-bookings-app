@@ -38,10 +38,12 @@ export function SettingsManager({
   companyId,
   demo,
   initialSettings,
+  onSaved,
 }: {
   companyId: string;
   demo: boolean;
   initialSettings: BookingSettings;
+  onSaved?: () => void;
 }) {
   const { settings, updatePreview, replaceSettings } = useTenantTheme();
   const [form, setForm] = useState({
@@ -152,6 +154,7 @@ export function SettingsManager({
         replaceSettings(payload.settings);
       }
       setSaved(true);
+      onSaved?.();
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "Could not save settings.",

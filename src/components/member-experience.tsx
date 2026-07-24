@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -20,7 +20,14 @@ import {
 } from "@/components/booking-calendar";
 import { DEFAULT_SUPPORT_CONTACT } from "@/lib/constants";
 import { AppBrand } from "@/components/app-brand";
-import { TenantThemeProvider } from "@/components/tenant-theme-provider";
+import {
+  TenantThemeProvider,
+  useTenantTheme,
+} from "@/components/tenant-theme-provider";
+import {
+  RefreshButton,
+  useLiveRefresh,
+} from "@/components/live-refresh";
 import {
   bookingStatusLabel,
   bookingStatusTone,
@@ -111,11 +118,34 @@ function MemberExperienceContent({
   );
   const [selected, setSelected] = useState<Offer | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [liveData, setLiveData] = useState(data);
   const [bookings, setBookings] = useState(
     data.bookings.filter((booking) => booking.whop_user_id === userId),
   );
+  const { replaceSettings } = useTenantTheme();
+  const applyLiveData = useCallback(
+    (next: DashboardData) => {
+      setLiveData(next);
+      setBookings(
+        next.bookings.filter((booking) => booking.whop_user_id === userId),
+      );
+      replaceSettings(next.settings);
+    },
+    [replaceSettings, userId],
+  );
+  const urgent = bookings.some(
+    (booking) =>
+      booking.status === "pending_payment" ||
+      ["requested", "processing"].includes(booking.refund_status ?? ""),
+  );
+  const { refresh, refreshing, lastUpdated, refreshError } =
+    useLiveRefresh<DashboardData>({
+      url: `/api/experience-data?experienceId=${encodeURIComponent(experienceId)}`,
+      onData: applyLiveData,
+      urgent,
+    });
   const supportContact =
-    data.settings.support_contact || DEFAULT_SUPPORT_CONTACT;
+    liveData.settings.support_contact || DEFAULT_SUPPORT_CONTACT;
   return (
     <main className="theme-root member-shell">
       <nav className="member-nav">
@@ -134,10 +164,18 @@ function MemberExperienceContent({
             My bookings
           </button>
         </div>
-        <button className="support-button" onClick={() => setHelpOpen(true)}>
-          <MessageCircle size={17} /> Help
-        </button>
+        <div className="member-nav-actions">
+          <RefreshButton
+            refreshing={refreshing}
+            lastUpdated={lastUpdated}
+            onRefresh={() => void refresh()}
+          />
+          <button className="support-button" onClick={() => setHelpOpen(true)}>
+            <MessageCircle size={17} /> Help
+          </button>
+        </div>
       </nav>
+      {refreshError && <p className="live-refresh-error">{refreshError}</p>}
       {checkoutComplete && (
         <div className="checkout-banner">
           <Check size={18} />
@@ -151,13 +189,14 @@ function MemberExperienceContent({
         </div>
       )}
       {view === "offers" ? (
-        <Offers data={data} onSelect={setSelected} />
+        <Offers data={liveData} onSelect={setSelected} />
       ) : (
         <MyBookings
           experienceId={experienceId}
           demo={data.demo}
           bookings={bookings}
-          timezone={data.settings.default_timezone}
+          timezone={liveData.settings.default_timezone}
+          onRefresh={() => void refresh()}
           onChange={(updated) =>
             setBookings((items) =>
               items.map((item) => (item.id === updated.id ? updated : item)),
@@ -166,18 +205,19 @@ function MemberExperienceContent({
         />
       )}
       <footer className="member-footer">
-        <span>Times shown in {data.settings.default_timezone}</span>
+        <span>Times shown in {liveData.settings.default_timezone}</span>
         <span>Payments securely handled by Whop</span>
       </footer>
       {selected && (
         <BookingFlow
           experienceId={experienceId}
           offer={selected}
-          data={data}
+          data={liveData}
           onClose={() => setSelected(null)}
           onSubmitted={(booking) => {
             setBookings((items) => [booking, ...items]);
             setView("bookings");
+            void refresh();
           }}
         />
       )}{" "}
@@ -340,12 +380,14 @@ function MyBookings({
   bookings,
   timezone,
   onChange,
+  onRefresh,
 }: {
   experienceId: string;
   demo: boolean;
   bookings: Booking[];
   timezone: string;
   onChange: (booking: Booking) => void;
+  onRefresh: () => void;
 }) {
   const [dialog, setDialog] = useState<{
     type: "refund" | "reschedule" | "cancel";
@@ -432,6 +474,7 @@ function MyBookings({
         updated = payload.booking;
       }
       onChange(updated);
+      onRefresh();
       setDialog(null);
       setReason("");
       setNewTime("");
@@ -443,6 +486,36 @@ function MyBookings({
       setSaving(false);
     }
   }
+  const closedStatuses = [
+    "completed",
+    "no_show",
+    "rejected",
+    "expired",
+    "cancelled",
+  ];
+  const bookingGroups = [
+    {
+      title: "Needs action",
+      description: "Complete these steps to secure your session.",
+      items: bookings.filter((booking) => booking.status === "pending_payment"),
+    },
+    {
+      title: "Upcoming",
+      description: "Requests under review and confirmed sessions.",
+      items: bookings.filter(
+        (booking) =>
+          booking.status !== "pending_payment" &&
+          !closedStatuses.includes(booking.status),
+      ),
+    },
+    {
+      title: "Past",
+      description: "Your completed and closed booking history.",
+      items: bookings.filter((booking) =>
+        closedStatuses.includes(booking.status),
+      ),
+    },
+  ].filter((group) => group.items.length > 0);
   return (
     <section className="member-bookings">
       <p className="eyebrow">Your sessions</p>
@@ -456,7 +529,17 @@ function MyBookings({
             <p>Choose a coaching offer when you’re ready.</p>
           </div>
         )}
-        {bookings.map((booking) => {
+        {bookingGroups.map((group) => (
+          <section className="member-booking-group" key={group.title}>
+            <header>
+              <div>
+                <h2>{group.title}</h2>
+                <p>{group.description}</p>
+              </div>
+              <span>{group.items.length}</span>
+            </header>
+            <div className="member-booking-group-list">
+        {group.items.map((booking) => {
           const active = ![
             "completed",
             "no_show",
@@ -467,8 +550,18 @@ function MyBookings({
           const refundOpen = ["requested", "processing", "refunded"].includes(
             booking.refund_status ?? "",
           );
+          const hasMeetingDetails =
+            booking.status === "confirmed" &&
+            Boolean(
+              booking.meeting_location ||
+                booking.meeting_url ||
+                booking.manual_join_instructions,
+            );
           return (
-            <article className="member-booking-card sc-card" key={booking.id}>
+            <article
+              className={`member-booking-card sc-card ${hasMeetingDetails ? "has-meeting-details" : "single-column"}`}
+              key={booking.id}
+            >
               <div>
                 <span
                   className={`health-badge ${bookingStatusTone(booking.status)}`}
@@ -541,6 +634,15 @@ function MyBookings({
                     <span>This time has been released. You can request another.</span>
                   </div>
                 )}
+                {booking.status === "confirmed" && !hasMeetingDetails && (
+                  <div className="booking-state-note">
+                    <strong>Your session is confirmed</strong>
+                    <span>
+                      Private meeting details will appear here when your coach
+                      adds them.
+                    </span>
+                  </div>
+                )}
                 <div className="member-booking-actions">
                   {booking.status === "confirmed" && (
                     <button
@@ -565,13 +667,12 @@ function MyBookings({
                   )}
                 </div>
               </div>
-              {booking.status === "confirmed" && (
+              {hasMeetingDetails && (
                 <div className="meeting-box">
                   <LockKeyhole size={18} />
                   <div>
                     <strong>
-                      {booking.meeting_location ||
-                        "Meeting details coming soon"}
+                      {booking.meeting_location || "Private meeting"}
                     </strong>
                     <p>
                       {booking.manual_join_instructions ||
@@ -592,6 +693,9 @@ function MyBookings({
             </article>
           );
         })}
+            </div>
+          </section>
+        ))}
       </div>
       {dialog && (
         <div className="modal-backdrop">

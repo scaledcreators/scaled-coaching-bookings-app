@@ -11,6 +11,9 @@ A Whop-native, manual-first coaching bookings app. Creators manage offers, avail
 - Month-grid customer calendar with date-specific time choices and navigation
 - Single-coach profile and availability model without roster or assignment UI
 - Default daily booking capacity plus per-date capacity overrides
+- Live authenticated refresh on a 15-second cadence, accelerated while payments or refunds are processing
+- Manual Refresh controls in the shared creator and customer headers
+- Lifecycle-safe drag-and-drop booking board with soft-archive Trash and restore
 - One reserving booking per member per local calendar day
 - Server-side blackout, booking, hold, notice-window, and advance-window validation
 - Transaction-scoped slot lock to prevent two concurrent requests from claiming the same slot
@@ -24,7 +27,7 @@ A Whop-native, manual-first coaching bookings app. Creators manage offers, avail
 1. Create a Supabase project.
 2. Run `supabase/migrations/202607210001_initial_schema.sql` in the SQL editor (or use the Supabase CLI migration flow).
    If the initial schema was installed before the service-role grant fix, also run `supabase/migrations/202607210002_service_role_privileges.sql`.
-   Then run the later migrations in filename order, including `202607220002_request_then_pay_on_approval.sql` and `202607220003_single_coach_daily_capacity.sql`. These migrations enable Supabase Cron for overdue payment windows and add the single-coach daily-capacity rules.
+   Then run the later migrations in filename order, including `202607220002_request_then_pay_on_approval.sql`, `202607220003_single_coach_daily_capacity.sql`, and `202607230001_capacity_and_booking_archive.sql`. These migrations enable Supabase Cron for overdue payment windows, make create/reschedule capacity checks atomic, and add soft-archive fields for booking history.
 3. Copy `.env.example` to `.env.local` and add the project URL, anon key, and service-role key.
 4. No Whop experience or company IDs need to be seeded. On first authenticated experience access, the server retrieves the experience from Whop, verifies that it belongs to this app, and caches its company relationship in `experience_installations`.
 
@@ -54,7 +57,7 @@ Without credentials, local development displays carefully labeled preview data. 
 
 ## Deploy
 
-Import `scaledcreators/scaled-coaching-bookings-app` into Vercel, select Next.js, add every value from `.env.example`, and deploy. Set `NEXT_PUBLIC_APP_URL` to the deployed HTTPS URL, then use that URL in Whop’s app and webhook settings.
+Import `scaledcreators/scaled-coaching-bookings-app` into Vercel, select Next.js, add every value from `.env.example`, and deploy. The checkout return URL uses the existing `NEXT_PUBLIC_APP_URL` or Vercel’s production-domain variable, so no additional `APP_URL` setting is required.
 
 ## Security notes
 

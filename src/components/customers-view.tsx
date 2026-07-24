@@ -2,7 +2,11 @@
 
 import { useMemo, useState } from "react";
 import { CalendarDays, ChevronRight, Search } from "lucide-react";
-import { bookingMemberInitial, bookingMemberLabel } from "@/lib/member";
+import {
+  bookingMemberInitial,
+  bookingMemberLabel,
+  bookingMemberUsername,
+} from "@/lib/member";
 import {
   bookingStatusLabel,
   bookingStatusTone,
@@ -22,6 +26,7 @@ export function CustomersView({ bookings }: { bookings: Booking[] }) {
           return {
             userId,
             label: bookingMemberLabel(history[0]),
+            username: bookingMemberUsername(history[0]),
             history,
             upcoming: history.filter((booking) =>
               [
@@ -37,7 +42,7 @@ export function CustomersView({ bookings }: { bookings: Booking[] }) {
           };
         })
         .filter((customer) =>
-          `${customer.label} ${customer.userId}`
+          `${customer.label} ${customer.username ?? ""} ${customer.userId}`
             .toLowerCase()
             .includes(query.toLowerCase()),
         ),
@@ -84,6 +89,9 @@ export function CustomersView({ bookings }: { bookings: Booking[] }) {
               </span>
               <div>
                 <strong>{customer.label}</strong>
+                {customer.username && customer.username !== customer.label && (
+                  <span className="customer-username">{customer.username}</span>
+                )}
                 <small>
                   {customer.history.length} bookings · {customer.upcoming} upcoming
                 </small>
@@ -99,7 +107,10 @@ export function CustomersView({ bookings }: { bookings: Booking[] }) {
                 <div>
                   <p className="eyebrow">Customer history</p>
                   <h2>{active.label}</h2>
-                  <p>{active.userId}</p>
+                  {active.username && active.username !== active.label && (
+                    <p className="customer-detail-username">{active.username}</p>
+                  )}
+                  <code className="customer-user-id">{active.userId}</code>
                 </div>
                 <span className="health-badge neutral">
                   {active.spentBookings} paid

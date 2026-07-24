@@ -4,18 +4,15 @@ import {
   buildAvailabilityCandidates,
   zonedParts,
 } from "@/lib/availability-time";
+import {
+  bookingDatesInTimezone,
+  bookingIntervals,
+  bookingReservesCapacity,
+  CAPACITY_RESERVING_STATUSES,
+} from "@/lib/booking-lifecycle";
 import { companyIdForExperience } from "@/lib/data";
 import { getSingleActiveCoach } from "@/lib/single-coach";
 import { getSupabaseAdmin } from "@/lib/supabase";
-
-const reservingStatuses = [
-  "pending_approval",
-  "pending_payment",
-  "confirmed",
-  "reschedule_requested",
-  "completed",
-  "no_show",
-];
 
 function dateKey(value: Date, timezone: string) {
   const parts = zonedParts(value, timezone);
@@ -34,17 +31,6 @@ function overlaps(
 ) {
   if (!blockedStart || !blockedEnd) return false;
   return new Date(blockedStart) < endsAt && new Date(blockedEnd) > startsAt;
-}
-
-function reservesDay(booking: {
-  status: string;
-  payment_due_at: string | null;
-}) {
-  return (
-    booking.status !== "pending_payment" ||
-    !booking.payment_due_at ||
-    new Date(booking.payment_due_at) > new Date()
-  );
 }
 
 export async function GET(request: Request) {
@@ -166,7 +152,7 @@ export async function GET(request: Request) {
           "whop_user_id,coach_id,status,requested_start_at,requested_end_at,confirmed_start_at,confirmed_end_at,payment_due_at",
         )
         .eq("whop_company_id", companyId)
-        .in("status", reservingStatuses),
+        .in("status", [...CAPACITY_RESERVING_STATUSES]),
       supabase
         .from("unavailable_windows")
         .select("coach_id,offer_id,starts_at,ends_at")
@@ -190,13 +176,14 @@ export async function GET(request: Request) {
     );
     const dayCounts = new Map<string, number>();
     const memberDays = new Set<string>();
-    const activeBookings = (bookings ?? []).filter(reservesDay);
+    const activeBookings = (bookings ?? []).filter((booking) =>
+      bookingReservesCapacity(booking, now),
+    );
     for (const booking of activeBookings) {
-      const start = booking.confirmed_start_at ?? booking.requested_start_at;
-      if (!start) continue;
-      const key = dateKey(new Date(start), timezone);
-      dayCounts.set(key, (dayCounts.get(key) ?? 0) + 1);
-      if (booking.whop_user_id === viewer.userId) memberDays.add(key);
+      for (const key of bookingDatesInTimezone(booking, timezone)) {
+        dayCounts.set(key, (dayCounts.get(key) ?? 0) + 1);
+        if (booking.whop_user_id === viewer.userId) memberDays.add(key);
+      }
     }
 
     const slotsByDate = new Map<string, string[]>();
@@ -226,11 +213,8 @@ export async function GET(request: Request) {
       const blockedByBooking = activeBookings.some(
         (booking) =>
           (booking.coach_id === null || booking.coach_id === coach.id) &&
-          overlaps(
-            blockedStart,
-            blockedEnd,
-            booking.confirmed_start_at ?? booking.requested_start_at,
-            booking.confirmed_end_at ?? booking.requested_end_at,
+          bookingIntervals(booking).some(([startsAt, endsAt]) =>
+            overlaps(blockedStart, blockedEnd, startsAt, endsAt),
           ),
       );
       const blockedByHold = (holds ?? []).some(

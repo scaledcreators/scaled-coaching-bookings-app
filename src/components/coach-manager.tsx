@@ -16,7 +16,7 @@ export function CoachManager({
   initialCoach: Coach | null;
   onCoachChange?: (coach: Coach) => void;
 }) {
-  const [coach, setCoach] = useState(initialCoach);
+  const coach = initialCoach;
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     name: initialCoach?.name ?? "",
@@ -64,7 +64,6 @@ export function CoachManager({
         if (!response.ok) throw new Error(payload.error);
         updated = payload.coach;
       }
-      setCoach(updated);
       onCoachChange?.(updated);
       setOpen(false);
     } catch (reason) {

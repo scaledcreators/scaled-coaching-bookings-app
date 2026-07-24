@@ -12,9 +12,14 @@ import {
 import { CustomCheckbox } from "@/components/custom-checkbox";
 import type {
   AvailabilityRule,
+  Booking,
   CapacityOverride,
   Coach,
 } from "@/lib/types";
+import {
+  bookingDatesInTimezone,
+  bookingReservesCapacity,
+} from "@/lib/booking-lifecycle";
 
 const dayNames = [
   "Sunday",
@@ -67,8 +72,10 @@ export function AvailabilityManager({
   timezone,
   defaultDailyCapacity,
   initialCapacityOverrides,
+  bookings,
   onAddBlackout,
   onRulesChange,
+  onDataChange,
 }: {
   companyId: string;
   demo: boolean;
@@ -77,18 +84,25 @@ export function AvailabilityManager({
   timezone: string;
   defaultDailyCapacity: number;
   initialCapacityOverrides: CapacityOverride[];
+  bookings: Booking[];
   onAddBlackout: () => void;
   onRulesChange?: (rules: AvailabilityRule[]) => void;
+  onDataChange?: () => void;
 }) {
   const coachId = coach?.id ?? null;
-  const [rules, setRules] = useState(initialRules);
+  const rules = initialRules;
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState("");
   const [draft, setDraft] = useState<Day[] | null>(null);
   const [dailyCapacity, setDailyCapacity] = useState(defaultDailyCapacity);
+  const [capacitySource, setCapacitySource] = useState(defaultDailyCapacity);
+  const [capacityDirty, setCapacityDirty] = useState(false);
   const [capacitySaved, setCapacitySaved] = useState(false);
   const [overrides, setOverrides] = useState(initialCapacityOverrides);
+  const overrideSignature = JSON.stringify(initialCapacityOverrides);
+  const [overrideSourceSignature, setOverrideSourceSignature] =
+    useState(overrideSignature);
   const [capacityMonth, setCapacityMonth] = useState(() =>
     startOfMonth(new Date()),
   );
@@ -99,6 +113,25 @@ export function AvailabilityManager({
   const [overrideCapacity, setOverrideCapacity] = useState(
     selectedOverride?.max_bookings ?? defaultDailyCapacity,
   );
+  const capacityUsage = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const booking of bookings) {
+      if (!bookingReservesCapacity(booking)) continue;
+      for (const key of bookingDatesInTimezone(booking, timezone)) {
+        counts.set(key, (counts.get(key) ?? 0) + 1);
+      }
+    }
+    return counts;
+  }, [bookings, timezone]);
+
+  if (capacitySource !== defaultDailyCapacity) {
+    setCapacitySource(defaultDailyCapacity);
+    if (!capacityDirty) setDailyCapacity(defaultDailyCapacity);
+  }
+  if (overrideSourceSignature !== overrideSignature) {
+    setOverrideSourceSignature(overrideSignature);
+    setOverrides(initialCapacityOverrides);
+  }
 
   const days = useMemo(() => {
     const result = blankDays().map((day) => ({ ...day, enabled: false }));
@@ -162,19 +195,16 @@ export function AvailabilityManager({
         if (!response.ok) throw new Error(payload.error);
         next = payload.rules;
       }
-      setRules((items) => {
-        const merged = [
-          ...items.filter(
-            (rule) =>
-              !(rule.coach_id === coachId && rule.offer_id === null),
-          ),
-          ...next,
-        ];
-        onRulesChange?.(merged);
-        return merged;
-      });
+      const merged = [
+        ...rules.filter(
+          (rule) => !(rule.coach_id === coachId && rule.offer_id === null),
+        ),
+        ...next,
+      ];
+      onRulesChange?.(merged);
       setDraft(null);
       setSaved(true);
+      onDataChange?.();
     } catch (reason) {
       setError(
         reason instanceof Error
@@ -203,6 +233,8 @@ export function AvailabilityManager({
         if (!response.ok) throw new Error(payload.error);
       }
       setCapacitySaved(true);
+      setCapacityDirty(false);
+      onDataChange?.();
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "Could not save capacity.",
@@ -250,6 +282,7 @@ export function AvailabilityManager({
         ...items.filter((item) => item.capacity_date !== selectedDate),
         savedOverride,
       ]);
+      onDataChange?.();
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "Could not save override.",
@@ -278,6 +311,7 @@ export function AvailabilityManager({
         items.filter((item) => item.capacity_date !== selectedDate),
       );
       setOverrideCapacity(dailyCapacity);
+      onDataChange?.();
     } catch (reason) {
       setError(
         reason instanceof Error ? reason.message : "Could not remove override.",
@@ -398,6 +432,7 @@ export function AvailabilityManager({
                 value={dailyCapacity}
                 onChange={(event) => {
                   setDailyCapacity(Number(event.target.value));
+                  setCapacityDirty(true);
                   setCapacitySaved(false);
                 }}
               />
@@ -464,17 +499,20 @@ export function AvailabilityManager({
                 const override = overrides.find(
                   (item) => item.capacity_date === key,
                 );
+                const limit = override?.max_bookings ?? dailyCapacity;
+                const reserved = capacityUsage.get(key) ?? 0;
+                const full = limit === 0 || reserved >= limit;
                 return (
                   <button
                     type="button"
                     key={key}
-                    className={`${outside ? "outside" : ""} ${override ? "has-override" : ""} ${selectedDate === key ? "selected" : ""}`}
+                    className={`${outside ? "outside" : ""} ${override ? "has-override" : ""} ${full ? "at-capacity" : ""} ${selectedDate === key ? "selected" : ""}`}
                     disabled={outside}
                     aria-pressed={selectedDate === key}
                     onClick={() => chooseCapacityDate(key)}
                   >
                     <span>{date.getDate()}</span>
-                    {override && <small>{override.max_bookings}</small>}
+                    {!outside && <small>{reserved}/{limit}</small>}
                   </button>
                 );
               })}
@@ -493,6 +531,23 @@ export function AvailabilityManager({
               {selectedOverride
                 ? `This date overrides the ${dailyCapacity}-booking default.`
                 : `This date currently uses the ${dailyCapacity}-booking default.`}
+            </p>
+            <div className="capacity-usage-summary">
+              <span>
+                <strong>{capacityUsage.get(selectedDate) ?? 0}</strong> reserved
+              </span>
+              <span>
+                <strong>{selectedOverride?.max_bookings ?? dailyCapacity}</strong> maximum
+              </span>
+            </div>
+            <p className="capacity-source">
+              {selectedOverride ? "Date override" : "Default capacity"}
+              {(selectedOverride?.max_bookings ?? dailyCapacity) === 0
+                ? " · Closed"
+                : (capacityUsage.get(selectedDate) ?? 0) >=
+                    (selectedOverride?.max_bookings ?? dailyCapacity)
+                  ? " · At capacity"
+                  : " · Accepting requests"}
             </p>
             <div className="field">
               <label htmlFor="override-capacity">Maximum bookings</label>

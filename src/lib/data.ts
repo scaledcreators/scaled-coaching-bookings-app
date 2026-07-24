@@ -178,6 +178,47 @@ export async function getCompanyData(
   } as DashboardData;
 }
 
+export function memberFacingCompanyData(
+  data: DashboardData,
+  experienceId: string,
+  userId: string,
+): DashboardData {
+  return {
+    ...data,
+    offers: data.offers.filter((offer) => offer.status === "published"),
+    unavailable: [],
+    coaches: [],
+    availability: [],
+    capacityOverrides: [],
+    bookings: data.bookings
+      .filter(
+        (booking) =>
+          booking.whop_user_id === userId &&
+          booking.whop_experience_id === experienceId,
+      )
+      .map((booking) => {
+        const releaseMeetingDetails = [
+          "confirmed",
+          "completed",
+          "no_show",
+        ].includes(booking.status);
+        return {
+          ...booking,
+          admin_note: null,
+          admin_archived_at: null,
+          admin_archived_by: null,
+          meeting_location: releaseMeetingDetails
+            ? booking.meeting_location
+            : null,
+          meeting_url: releaseMeetingDetails ? booking.meeting_url : null,
+          manual_join_instructions: releaseMeetingDetails
+            ? booking.manual_join_instructions
+            : null,
+        };
+      }),
+  };
+}
+
 export async function companyIdForExperience(experienceId: string) {
   if (!isSupabaseConfigured()) return demoData.companyId;
   const supabase = getSupabaseAdmin();

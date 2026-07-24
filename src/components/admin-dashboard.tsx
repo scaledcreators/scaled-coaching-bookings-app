@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import {
+  ArchiveRestore,
   AlertTriangle,
   Ban,
   CalendarDays,
@@ -9,15 +10,31 @@ import {
   ChevronRight,
   CircleDollarSign,
   Clock3,
+  GripVertical,
   LayoutDashboard,
   Menu,
+  MoreHorizontal,
   Plus,
   Power,
   Settings,
   UserRound,
   Users,
   X,
+  Trash2,
 } from "lucide-react";
+import {
+  closestCenter,
+  DndContext,
+  type DragEndEvent,
+  type DragStartEvent,
+  KeyboardSensor,
+  PointerSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import { CSS } from "@dnd-kit/utilities";
 import type { Booking, DashboardData, UnavailableWindow } from "@/lib/types";
 import { OfferManager } from "@/components/offer-manager";
 import { CoachManager } from "@/components/coach-manager";
@@ -26,16 +43,25 @@ import { CustomersView } from "@/components/customers-view";
 import { SettingsManager } from "@/components/settings-manager";
 import { CustomDateRangePicker } from "@/components/custom-date-range-picker";
 import { OverlayPortal } from "@/components/overlay-portal";
-import { bookingMemberInitial, bookingMemberLabel } from "@/lib/member";
+import {
+  bookingMemberInitial,
+  bookingMemberLabel,
+  bookingMemberUsername,
+} from "@/lib/member";
 import {
   bookingStatusLabel,
   bookingStatusTone,
 } from "@/lib/booking-status";
 import { AppBrand } from "@/components/app-brand";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   TenantThemeProvider,
   useTenantTheme,
 } from "@/components/tenant-theme-provider";
+import {
+  RefreshButton,
+  useLiveRefresh,
+} from "@/components/live-refresh";
 
 type Section =
   | "overview"
@@ -47,7 +73,6 @@ type Section =
   | "customers"
   | "settings";
 type BookingChanges = {
-  status?: Booking["status"];
   requestedStartAt?: string;
   meetingLocation?: string;
   meetingUrl?: string;
@@ -96,7 +121,7 @@ function AdminDashboardContent({
 }: {
   initialData: DashboardData;
 }) {
-  const { settings: tenantSettings } = useTenantTheme();
+  const { settings: tenantSettings, replaceSettings } = useTenantTheme();
   const [section, setSection] = useState<Section>("overview");
   const [mobileNav, setMobileNav] = useState(false);
   const [paused, setPaused] = useState(initialData.emergencyPaused);
@@ -104,31 +129,51 @@ function AdminDashboardContent({
   const [offers, setOffers] = useState(initialData.offers);
   const [coaches, setCoaches] = useState(initialData.coaches);
   const [availability, setAvailability] = useState(initialData.availability);
+  const [capacityOverrides, setCapacityOverrides] = useState(
+    initialData.capacityOverrides,
+  );
   const [windows, setWindows] = useState(initialData.unavailable);
   const [blackoutOpen, setBlackoutOpen] = useState(false);
   const [actionError, setActionError] = useState("");
-  const pending = bookings.filter((booking) =>
+  const visibleBookings = bookings.filter(
+    (booking) => !booking.admin_archived_at,
+  );
+  const pending = visibleBookings.filter((booking) =>
     ["pending_approval", "reschedule_requested"].includes(booking.status),
   );
-  const awaitingPayment = bookings.filter(
+  const awaitingPayment = visibleBookings.filter(
     (booking) => booking.status === "pending_payment",
   );
-  const confirmed = bookings.filter(
+  const confirmed = visibleBookings.filter(
     (booking) => booking.status === "confirmed",
   );
+  const applyLiveData = useCallback(
+    (next: DashboardData) => {
+      setBookings(next.bookings);
+      setOffers(next.offers);
+      setCoaches(next.coaches);
+      setAvailability(next.availability);
+      setCapacityOverrides(next.capacityOverrides);
+      setWindows(next.unavailable);
+      setPaused(next.emergencyPaused);
+      if (section !== "settings") replaceSettings(next.settings);
+    },
+    [replaceSettings, section],
+  );
+  const urgentRefresh = bookings.some(
+    (booking) =>
+      booking.status === "pending_payment" ||
+      ["requested", "processing"].includes(booking.refund_status ?? ""),
+  );
+  const { refresh, refreshing, lastUpdated, refreshError } =
+    useLiveRefresh<DashboardData>({
+      url: `/api/dashboard-data?companyId=${encodeURIComponent(initialData.companyId)}`,
+      onData: applyLiveData,
+      urgent: urgentRefresh,
+    });
   async function updateBooking(id: string, changes: BookingChanges) {
     const previous = bookings;
     setActionError("");
-    setBookings((items) =>
-      items.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              ...(changes.status ? { status: changes.status } : {}),
-            }
-          : item,
-      ),
-    );
     if (initialData.demo) {
       setBookings((items) =>
         items.map((item) =>
@@ -142,6 +187,11 @@ function AdminDashboardContent({
                   changes.joinInstructions ?? item.manual_join_instructions,
                 admin_note: changes.adminNote ?? item.admin_note,
                 refund_status: changes.refundStatus ?? item.refund_status,
+                requested_start_at:
+                  changes.requestedStartAt ?? item.requested_start_at,
+                status: changes.requestedStartAt
+                  ? "reschedule_requested"
+                  : item.status,
               }
             : item,
         ),
@@ -165,6 +215,7 @@ function AdminDashboardContent({
             : item,
         ),
       );
+    if (response.ok) void refresh();
   }
   async function decideBooking(
     id: string,
@@ -231,6 +282,7 @@ function AdminDashboardContent({
           : item,
       ),
     );
+    void refresh();
   }
   async function issueRefund(id: string) {
     const previous = bookings;
@@ -260,6 +312,84 @@ function AdminDashboardContent({
             : item,
         ),
       );
+    if (response.ok) void refresh();
+  }
+  async function transitionBooking(
+    id: string,
+    action: "complete" | "no_show" | "cancel",
+  ) {
+    setActionError("");
+    if (initialData.demo) {
+      setBookings((items) =>
+        items.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                status:
+                  action === "complete"
+                    ? "completed"
+                    : action === "no_show"
+                      ? "no_show"
+                      : "cancelled",
+              }
+            : item,
+        ),
+      );
+      return;
+    }
+    const response = await fetch(`/api/booking-requests/${id}/transition`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ companyId: initialData.companyId, action }),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      setActionError(body.error || "Could not move booking.");
+      return;
+    }
+    setBookings((items) =>
+      items.map((item) =>
+        item.id === id
+          ? { ...body.booking, member_profile: item.member_profile }
+          : item,
+      ),
+    );
+    void refresh();
+  }
+  async function archiveBooking(id: string, action: "archive" | "restore") {
+    setActionError("");
+    if (initialData.demo) {
+      setBookings((items) =>
+        items.map((item) =>
+          item.id === id
+            ? {
+                ...item,
+                admin_archived_at:
+                  action === "archive" ? new Date().toISOString() : null,
+              }
+            : item,
+        ),
+      );
+      return;
+    }
+    const response = await fetch(`/api/booking-requests/${id}/archive`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ companyId: initialData.companyId, action }),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      setActionError(body.error || "Could not update Trash.");
+      return;
+    }
+    setBookings((items) =>
+      items.map((item) =>
+        item.id === id
+          ? { ...body.booking, member_profile: item.member_profile }
+          : item,
+      ),
+    );
+    void refresh();
   }
   async function togglePause() {
     const next = !paused;
@@ -274,6 +404,7 @@ function AdminDashboardContent({
         }),
       });
       if (!response.ok) setPaused(!next);
+      else void refresh();
     }
   }
   return (
@@ -335,6 +466,11 @@ function AdminDashboardContent({
             <h1>{nav.find((item) => item.key === section)?.label}</h1>
           </div>
           <div className="topbar-actions">
+            <RefreshButton
+              refreshing={refreshing}
+              lastUpdated={lastUpdated}
+              onRefresh={() => void refresh()}
+            />
             {initialData.demo && (
               <span className="status-badge draft">Preview data</span>
             )}
@@ -343,6 +479,7 @@ function AdminDashboardContent({
             </span>
           </div>
         </header>
+        {refreshError && <p className="live-refresh-error">{refreshError}</p>}
         {paused && (
           <div className="pause-banner">
             <AlertTriangle size={18} />
@@ -359,7 +496,7 @@ function AdminDashboardContent({
             awaitingPayment={awaitingPayment}
             confirmed={confirmed}
             windows={windows}
-            bookings={bookings}
+            bookings={visibleBookings}
             onSelect={setSection}
           />
         )}
@@ -370,6 +507,8 @@ function AdminDashboardContent({
             onUpdate={updateBooking}
             onDecision={decideBooking}
             onRefund={issueRefund}
+            onTransition={transitionBooking}
+            onArchive={archiveBooking}
           />
         )}
         {section === "offers" && (
@@ -377,7 +516,10 @@ function AdminDashboardContent({
             companyId={initialData.companyId}
             demo={initialData.demo}
             initialOffers={offers}
-            onOffersChange={setOffers}
+            onOffersChange={(next) => {
+              setOffers(next);
+              void refresh();
+            }}
           />
         )}
         {section === "availability" && (
@@ -388,9 +530,14 @@ function AdminDashboardContent({
             initialRules={availability}
             timezone={tenantSettings.default_timezone}
             defaultDailyCapacity={tenantSettings.default_daily_capacity}
-            initialCapacityOverrides={initialData.capacityOverrides}
+            initialCapacityOverrides={capacityOverrides}
+            bookings={bookings}
             onAddBlackout={() => setBlackoutOpen(true)}
-            onRulesChange={setAvailability}
+            onRulesChange={(next) => {
+              setAvailability(next);
+              void refresh();
+            }}
+            onDataChange={() => void refresh()}
           />
         )}
         {section === "unavailable" && (
@@ -400,7 +547,10 @@ function AdminDashboardContent({
             demo={initialData.demo}
             onAdd={() => setBlackoutOpen(true)}
             onRemove={(id) =>
-              setWindows((items) => items.filter((item) => item.id !== id))
+              {
+                setWindows((items) => items.filter((item) => item.id !== id));
+                void refresh();
+              }
             }
           />
         )}
@@ -411,7 +561,10 @@ function AdminDashboardContent({
             initialCoach={
               coaches.find((coach) => coach.status === "active") ?? null
             }
-            onCoachChange={(coach) => setCoaches([coach])}
+            onCoachChange={(coach) => {
+              setCoaches([coach]);
+              void refresh();
+            }}
           />
         )}
         {section === "customers" && <CustomersView bookings={bookings} />}
@@ -420,6 +573,7 @@ function AdminDashboardContent({
             companyId={initialData.companyId}
             demo={initialData.demo}
             initialSettings={tenantSettings}
+            onSaved={() => void refresh()}
           />
         )}
       </section>
@@ -432,6 +586,7 @@ function AdminDashboardContent({
             setWindows((items) => [window, ...items]);
             setBlackoutOpen(false);
             setSection("unavailable");
+            void refresh();
           }}
         />
       )}
@@ -569,167 +724,548 @@ function Overview({
   );
 }
 
+type BoardColumnId =
+  | "pending_approval"
+  | "pending_payment"
+  | "confirmed"
+  | "refunds"
+  | "closed";
+
+const bookingColumns: { id: BoardColumnId; title: string }[] = [
+  { id: "pending_approval", title: "Pending Approval" },
+  { id: "pending_payment", title: "Pending Payment" },
+  { id: "confirmed", title: "Confirmed" },
+  { id: "refunds", title: "Refunds" },
+  { id: "closed", title: "Closed" },
+];
+
+function bookingBoardColumn(booking: Booking): BoardColumnId {
+  if (["requested", "processing"].includes(booking.refund_status ?? "")) {
+    return "refunds";
+  }
+  if (["pending_approval", "reschedule_requested"].includes(booking.status)) {
+    return "pending_approval";
+  }
+  if (booking.status === "pending_payment") return "pending_payment";
+  if (booking.status === "confirmed") return "confirmed";
+  return "closed";
+}
+
+function DroppableBookingColumn({
+  id,
+  title,
+  count,
+  disabled,
+  children,
+}: {
+  id: BoardColumnId;
+  title: string;
+  count: number;
+  disabled: boolean;
+  children: React.ReactNode;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id, disabled });
+  return (
+    <section
+      ref={setNodeRef}
+      className={`board-column ${isOver ? "drop-target" : ""} ${disabled ? "drop-disabled" : ""}`}
+      data-drop-disabled={disabled || undefined}
+      title={
+        disabled
+          ? "This lifecycle move is not available for the selected booking."
+          : undefined
+      }
+    >
+      <header>
+        <h2>{title}</h2>
+        <span>{count}</span>
+      </header>
+      {children}
+    </section>
+  );
+}
+
+type TicketAction = {
+  label: string;
+  onSelect: () => void;
+  primary?: boolean;
+};
+
+function DraggableBookingTicket({
+  booking,
+  actions,
+  onOpen,
+}: {
+  booking: Booking;
+  actions: TicketAction[];
+  onOpen: () => void;
+}) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { attributes, listeners, setNodeRef, transform, isDragging } =
+    useDraggable({ id: booking.id });
+  const username = bookingMemberUsername(booking);
+  return (
+    <article
+      ref={setNodeRef}
+      className={`booking-ticket ${isDragging ? "dragging" : ""}`}
+      style={{ transform: CSS.Translate.toString(transform) }}
+    >
+      <div className="ticket-drag-row">
+        <button
+          type="button"
+          className="ticket-drag-handle"
+          aria-label={`Drag ${booking.booking_offers?.title ?? "booking"}`}
+          {...listeners}
+          {...attributes}
+        >
+          <GripVertical size={16} />
+        </button>
+        <div className="ticket-menu-wrap">
+          <button
+            type="button"
+            className="ticket-menu-button"
+            aria-label="Booking actions"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((value) => !value)}
+          >
+            <MoreHorizontal size={16} />
+          </button>
+          {menuOpen && (
+            <div className="ticket-action-menu">
+              <button type="button" onClick={onOpen}>Open details</button>
+              {actions.map((action) => (
+                <button
+                  type="button"
+                  key={action.label}
+                  onClick={() => {
+                    setMenuOpen(false);
+                    action.onSelect();
+                  }}
+                >
+                  {action.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      <div className="ticket-top">
+        <span className={`health-badge ${bookingStatusTone(booking.status)}`}>
+          {booking.refund_status && booking.refund_status !== "not_requested"
+            ? booking.refund_status
+            : bookingStatusLabel(booking.status)}
+        </span>
+        <small>{booking.booking_offers?.duration_minutes} min</small>
+      </div>
+      <h3>{booking.booking_offers?.title ?? "Coaching session"}</h3>
+      <p>
+        {formatDate(
+          booking.confirmed_start_at ?? booking.requested_start_at,
+        )}
+      </p>
+      {booking.status === "pending_payment" && booking.payment_due_at && (
+        <small className="payment-deadline">
+          Payment due {formatDate(booking.payment_due_at)}
+        </small>
+      )}
+      <div className="member-line">
+        <span className="avatar">{bookingMemberInitial(booking)}</span>
+        <span className="member-line-copy">
+          <strong>{bookingMemberLabel(booking)}</strong>
+          {username && username !== bookingMemberLabel(booking) && (
+            <small>{username}</small>
+          )}
+        </span>
+      </div>
+      <button className="ticket-details" onClick={onOpen}>Open details</button>
+      {actions.length > 0 && (
+        <div className="ticket-actions">
+          {actions.slice(0, 2).map((action) => (
+            <button
+              type="button"
+              className={action.primary ? "confirm-button" : undefined}
+              key={action.label}
+              onClick={action.onSelect}
+            >
+              {action.primary && <Check size={15} />}
+              {action.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </article>
+  );
+}
+
+function BookingCloseDialog({
+  booking,
+  onClose,
+  onTransition,
+  onRefund,
+}: {
+  booking: Booking;
+  onClose: () => void;
+  onTransition: (action: "complete" | "no_show" | "cancel") => void;
+  onRefund: () => void;
+}) {
+  return (
+    <OverlayPortal>
+      <div className="modal-backdrop">
+        <section className="modal booking-move-modal sc-card" role="dialog" aria-modal="true">
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Close booking</p>
+              <h2>Choose the correct outcome</h2>
+              <p>{booking.booking_offers?.title}</p>
+            </div>
+            <button className="icon-button" onClick={onClose} aria-label="Close">
+              <X size={18} />
+            </button>
+          </div>
+          <div className="booking-outcome-actions">
+            <button onClick={() => onTransition("complete")}>Completed</button>
+            <button onClick={() => onTransition("no_show")}>No-show</button>
+            <button onClick={booking.whop_payment_id ? onRefund : () => onTransition("cancel")}>
+              {booking.whop_payment_id ? "Refund & cancel" : "Cancel booking"}
+            </button>
+          </div>
+        </section>
+      </div>
+    </OverlayPortal>
+  );
+}
+
 function BookingsBoard({
   bookings,
   error,
   onUpdate,
   onDecision,
   onRefund,
+  onTransition,
+  onArchive,
 }: {
   bookings: Booking[];
   error: string;
   onUpdate: (id: string, changes: BookingChanges) => void;
-  onDecision: (
-    id: string,
-    action: "approve" | "reject",
-  ) => void;
+  onDecision: (id: string, action: "approve" | "reject") => void;
   onRefund: (id: string) => void;
+  onTransition: (
+    id: string,
+    action: "complete" | "no_show" | "cancel",
+  ) => void;
+  onArchive: (id: string, action: "archive" | "restore") => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const columns = [
-    {
-      title: "Pending Approval",
-      test: (booking: Booking) =>
-        ["pending_approval", "reschedule_requested"].includes(booking.status),
-    },
-    {
-      title: "Pending Payment",
-      test: (booking: Booking) => booking.status === "pending_payment",
-    },
-    {
-      title: "Confirmed",
-      test: (booking: Booking) => booking.status === "confirmed",
-    },
-    {
-      title: "Refunds",
-      test: (booking: Booking) =>
-        ["requested", "processing"].includes(booking.refund_status ?? ""),
-    },
-    {
-      title: "Closed",
-      test: (booking: Booking) =>
-        ["completed", "rejected", "expired", "cancelled", "no_show"].includes(
-          booking.status,
-        ),
-    },
-  ];
+  const [showTrash, setShowTrash] = useState(false);
+  const [draggedBookingId, setDraggedBookingId] = useState<string | null>(null);
+  const [localMessage, setLocalMessage] = useState("");
+  const [closeBooking, setCloseBooking] = useState<Booking | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    booking: Booking;
+    kind: "reject" | "cancel" | "refund" | "archive";
+  } | null>(null);
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor),
+  );
+  const activeBookings = bookings.filter((booking) => !booking.admin_archived_at);
+  const archivedBookings = bookings.filter((booking) => booking.admin_archived_at);
+  const draggedBooking = activeBookings.find(
+    (booking) => booking.id === draggedBookingId,
+  );
   const selected = bookings.find((booking) => booking.id === selectedId);
+  const trashDisabled = Boolean(
+    draggedBooking && bookingBoardColumn(draggedBooking) !== "closed",
+  );
+  const { setNodeRef: setTrashRef, isOver: trashOver } = useDroppable({
+    id: "trash",
+    disabled: trashDisabled,
+  });
+
+  function validDropTargets(booking: Booking) {
+    const source = bookingBoardColumn(booking);
+    const targets = new Set<string>([source]);
+    if (source === "pending_approval") {
+      const paid =
+        booking.booking_offers?.access_mode === "paid" &&
+        (booking.booking_offers?.price_cents ?? 0) > 0 &&
+        !booking.whop_payment_id;
+      targets.add(paid ? "pending_payment" : "confirmed");
+      targets.add("closed");
+    }
+    if (source === "pending_payment") targets.add("closed");
+    if (source === "confirmed") {
+      targets.add("closed");
+      if (booking.whop_payment_id) targets.add("refunds");
+    }
+    if (source === "closed") targets.add("trash");
+    return targets;
+  }
+
+  function requestConfirmation(
+    booking: Booking,
+    kind: "reject" | "cancel" | "refund" | "archive",
+  ) {
+    setLocalMessage("");
+    setConfirmAction({ booking, kind });
+  }
+
+  function actionsFor(booking: Booking): TicketAction[] {
+    if (["pending_approval", "reschedule_requested"].includes(booking.status)) {
+      return [
+        {
+          label: "Approve",
+          primary: true,
+          onSelect: () => onDecision(booking.id, "approve"),
+        },
+        {
+          label: "Reject",
+          onSelect: () => requestConfirmation(booking, "reject"),
+        },
+      ];
+    }
+    if (booking.status === "pending_payment") {
+      return [
+        {
+          label: "Cancel",
+          onSelect: () => requestConfirmation(booking, "cancel"),
+        },
+      ];
+    }
+    if (booking.refund_status === "requested") {
+      return [
+        {
+          label: "Issue refund",
+          primary: true,
+          onSelect: () => requestConfirmation(booking, "refund"),
+        },
+        {
+          label: "Decline",
+          onSelect: () => onUpdate(booking.id, { refundStatus: "declined" }),
+        },
+      ];
+    }
+    if (booking.status === "confirmed") {
+      return [
+        {
+          label: "Close session",
+          onSelect: () => setCloseBooking(booking),
+        },
+      ];
+    }
+    return [
+      {
+        label: "Move to Trash",
+        onSelect: () => requestConfirmation(booking, "archive"),
+      },
+    ];
+  }
+
+  function onDragEnd(event: DragEndEvent) {
+    const booking = activeBookings.find((item) => item.id === event.active.id);
+    const target = event.over?.id;
+    setDraggedBookingId(null);
+    if (!booking || !target) return;
+    setLocalMessage("");
+    if (target === "trash") {
+      if (bookingBoardColumn(booking) !== "closed") {
+        setLocalMessage("Close active bookings before moving them to Trash.");
+      } else {
+        requestConfirmation(booking, "archive");
+      }
+      return;
+    }
+    const targetColumn = target as BoardColumnId;
+    const sourceColumn = bookingBoardColumn(booking);
+    if (sourceColumn === targetColumn) return;
+    if (sourceColumn === "pending_approval") {
+      if (["pending_payment", "confirmed"].includes(targetColumn)) {
+        onDecision(booking.id, "approve");
+      } else if (targetColumn === "closed") {
+        requestConfirmation(booking, "reject");
+      } else {
+        setLocalMessage("That request cannot move to this column.");
+      }
+      return;
+    }
+    if (sourceColumn === "pending_payment") {
+      if (targetColumn === "closed") requestConfirmation(booking, "cancel");
+      else
+        setLocalMessage(
+          "Pending payment can only become Confirmed through Whop’s payment webhook.",
+        );
+      return;
+    }
+    if (sourceColumn === "confirmed") {
+      if (targetColumn === "closed") setCloseBooking(booking);
+      else if (targetColumn === "refunds" && booking.whop_payment_id)
+        requestConfirmation(booking, "refund");
+      else setLocalMessage("Choose a valid close or refund action for this booking.");
+      return;
+    }
+    setLocalMessage("Closed and refund records cannot be reopened by dragging.");
+  }
+
+  function onDragStart(event: DragStartEvent) {
+    setDraggedBookingId(String(event.active.id));
+    setLocalMessage("");
+  }
+
+  function confirmPendingAction() {
+    if (!confirmAction) return;
+    const { booking, kind } = confirmAction;
+    if (kind === "reject") onDecision(booking.id, "reject");
+    if (kind === "cancel") onTransition(booking.id, "cancel");
+    if (kind === "refund") onRefund(booking.id);
+    if (kind === "archive") onArchive(booking.id, "archive");
+    setConfirmAction(null);
+  }
+
+  const confirmCopy = confirmAction
+    ? {
+        reject: {
+          title: "Reject this request?",
+          description: "The requested time will be released and the customer will be notified. No payment will be taken.",
+          label: "Reject request",
+        },
+        cancel: {
+          title: "Cancel this booking?",
+          description: "The reserved time and any unused checkout link will be released. Paid confirmed bookings must use the refund flow.",
+          label: "Cancel booking",
+        },
+        refund: {
+          title: "Issue this refund?",
+          description: "Whop will process the refund and the booking will close. This action cannot be undone here.",
+          label: "Issue refund",
+        },
+        archive: {
+          title: "Move this record to Trash?",
+          description: "It will leave the active board but remain in the audit and payment history. You can restore it later.",
+          label: "Move to Trash",
+        },
+      }[confirmAction.kind]
+    : null;
+
   return (
     <div className="content-stack fade-in">
-      <div className="section-intro">
+      <div className="section-intro booking-board-intro">
         <p>
-          Review every request before payment. Approved paid sessions wait here
-          for the member to pay; meeting details remain private until Whop
-          confirms the charge.
+          Drag cards between valid stages, or use each card’s actions menu.
+          Payment confirmation and refunds always remain controlled by Whop.
         </p>
+        <div className="booking-view-toggle">
+          <button className={!showTrash ? "active" : ""} onClick={() => setShowTrash(false)}>
+            Active
+          </button>
+          <button className={showTrash ? "active" : ""} onClick={() => setShowTrash(true)}>
+            Trash <span>{archivedBookings.length}</span>
+          </button>
+        </div>
       </div>
-      {error && <p className="form-error action-error">{error}</p>}
-      <div className="booking-board">
-        {columns.map((column) => (
-          <section className="board-column" key={column.title}>
-            <header>
-              <h2>{column.title}</h2>
-              <span>{bookings.filter(column.test).length}</span>
-            </header>
-            {bookings.filter(column.test).map((booking) => (
-              <article
-                className="booking-ticket"
-                key={`${column.title}-${booking.id}`}
-              >
-                <div className="ticket-top">
-                  <span
-                    className={`health-badge ${bookingStatusTone(booking.status)}`}
-                  >
-                    {booking.refund_status &&
-                    booking.refund_status !== "not_requested"
-                      ? booking.refund_status
-                      : bookingStatusLabel(booking.status)}
-                  </span>
-                  <small>{booking.booking_offers?.duration_minutes} min</small>
+      {(error || localMessage) && (
+        <p className="form-error action-error">{error || localMessage}</p>
+      )}
+      {showTrash ? (
+        <section className="panel archived-bookings">
+          <div className="panel-heading">
+            <div><p className="eyebrow">Booking history</p><h2>Trash</h2></div>
+          </div>
+          {archivedBookings.length === 0 ? (
+            <Empty text="No archived bookings." />
+          ) : (
+            archivedBookings.map((booking) => (
+              <div className="archived-booking-row" key={booking.id}>
+                <div>
+                  <strong>{booking.booking_offers?.title ?? "Coaching session"}</strong>
+                  <p>{bookingMemberLabel(booking)} · {formatDate(booking.requested_start_at)}</p>
                 </div>
-                <h3>{booking.booking_offers?.title ?? "Coaching session"}</h3>
-                <p>
-                  {formatDate(
-                    booking.confirmed_start_at ?? booking.requested_start_at,
-                  )}
-                </p>
-                {booking.status === "pending_payment" &&
-                  booking.payment_due_at && (
-                    <small className="payment-deadline">
-                      Payment due {formatDate(booking.payment_due_at)}
-                    </small>
-                  )}
-                <div className="member-line">
-                  <span className="avatar">
-                    {bookingMemberInitial(booking)}
-                  </span>
-                  <span>{bookingMemberLabel(booking)}</span>
-                </div>
-                <button
-                  className="ticket-details"
-                  onClick={() => setSelectedId(booking.id)}
-                >
-                  Open details
+                <button className="sc-btn-secondary" onClick={() => onArchive(booking.id, "restore")}>
+                  <ArchiveRestore size={15} /> Restore
                 </button>
-                {["pending_approval", "reschedule_requested"].includes(
-                  booking.status,
-                ) && (
-                  <div className="ticket-actions">
-                    <button
-                      className="confirm-button"
-                      onClick={() => onDecision(booking.id, "approve")}
-                    >
-                      <Check size={15} /> Approve
-                    </button>
-                    <button onClick={() => onDecision(booking.id, "reject")}>
-                      Reject
-                    </button>
-                  </div>
-                )}
-                {booking.status === "confirmed" && (
-                  <div className="ticket-actions">
-                    <button
-                      onClick={() =>
-                        onUpdate(booking.id, { status: "completed" })
-                      }
-                    >
-                      Complete
-                    </button>
-                    {booking.whop_payment_id && (
-                      <button onClick={() => onRefund(booking.id)}>
-                        Refund
-                      </button>
-                    )}
-                  </div>
-                )}
-                {column.title === "Refunds" &&
-                  booking.refund_status === "requested" && (
-                    <div className="ticket-actions">
-                      <button
-                        className="confirm-button"
-                        onClick={() => onRefund(booking.id)}
-                      >
-                        Issue refund
-                      </button>
-                      <button
-                        onClick={() =>
-                          onUpdate(booking.id, { refundStatus: "declined" })
-                        }
-                      >
-                        Decline
-                      </button>
-                    </div>
+              </div>
+            ))
+          )}
+        </section>
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={onDragStart}
+          onDragCancel={() => setDraggedBookingId(null)}
+          onDragEnd={onDragEnd}
+        >
+          <div className="booking-board">
+            {bookingColumns.map((column) => {
+              const items = activeBookings.filter(
+                (booking) => bookingBoardColumn(booking) === column.id,
+              );
+              return (
+                <DroppableBookingColumn
+                  id={column.id}
+                  title={column.title}
+                  count={items.length}
+                  disabled={Boolean(
+                    draggedBooking &&
+                      !validDropTargets(draggedBooking).has(column.id),
                   )}
-              </article>
-            ))}
-          </section>
-        ))}
-      </div>
+                  key={column.id}
+                >
+                  {items.map((booking) => (
+                    <DraggableBookingTicket
+                      booking={booking}
+                      actions={actionsFor(booking)}
+                      onOpen={() => setSelectedId(booking.id)}
+                      key={booking.id}
+                    />
+                  ))}
+                </DroppableBookingColumn>
+              );
+            })}
+          </div>
+          {draggedBooking && (
+            <div
+              ref={setTrashRef}
+              className={`booking-trash-drop ${trashOver ? "drop-target" : ""} ${trashDisabled ? "drop-disabled" : ""}`}
+              aria-disabled={trashDisabled}
+            >
+              <Trash2 size={19} />
+              <span>
+                {trashDisabled
+                  ? "Close this booking before moving it to Trash"
+                  : "Drop here to move this record to Trash"}
+              </span>
+            </div>
+          )}
+        </DndContext>
+      )}
       {selected && (
         <BookingDetail
           booking={selected}
           onClose={() => setSelectedId(null)}
           onUpdate={onUpdate}
+        />
+      )}
+      {closeBooking && (
+        <BookingCloseDialog
+          booking={closeBooking}
+          onClose={() => setCloseBooking(null)}
+          onTransition={(action) => {
+            onTransition(closeBooking.id, action);
+            setCloseBooking(null);
+          }}
+          onRefund={() => {
+            onRefund(closeBooking.id);
+            setCloseBooking(null);
+          }}
+        />
+      )}
+      {confirmAction && confirmCopy && (
+        <ConfirmDialog
+          title={confirmCopy.title}
+          description={confirmCopy.description}
+          confirmLabel={confirmCopy.label}
+          onConfirm={confirmPendingAction}
+          onClose={() => setConfirmAction(null)}
         />
       )}
     </div>
@@ -767,7 +1303,6 @@ function BookingDetail({
             ...(form.proposedTime
               ? {
                   requestedStartAt: new Date(form.proposedTime).toISOString(),
-                  status: "reschedule_requested" as const,
                 }
               : {}),
           });
@@ -778,16 +1313,22 @@ function BookingDetail({
           <div>
             <p className="eyebrow">Booking details</p>
             <h2>{booking.booking_offers?.title}</h2>
-            <p>
-              {bookingMemberLabel(booking)} ·{" "}
-              {formatDate(booking.requested_start_at)}
-            </p>
+            <div className="booking-detail-member">
+              <strong>{bookingMemberLabel(booking)}</strong>
+              {bookingMemberUsername(booking) &&
+                bookingMemberUsername(booking) !==
+                  bookingMemberLabel(booking) && (
+                  <span>{bookingMemberUsername(booking)}</span>
+                )}
+              <code>{booking.whop_user_id}</code>
+            </div>
+            <p>{formatDate(booking.requested_start_at)}</p>
           </div>
           <button type="button" className="icon-button" onClick={onClose}>
             <X size={18} />
           </button>
         </div>
-        <div className="field">
+        {booking.status === "confirmed" && <div className="field">
             <label>Propose another time</label>
             <input
               type="datetime-local"
@@ -796,7 +1337,7 @@ function BookingDetail({
                 setForm({ ...form, proposedTime: event.target.value })
               }
             />
-        </div>
+        </div>}
         <div className="form-grid">
           <div className="field">
             <label>Meeting location</label>

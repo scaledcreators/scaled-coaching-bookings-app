@@ -2,7 +2,6 @@ import { z } from "zod";
 import { requireRequestViewer } from "@/lib/auth";
 import { getApplicableAvailabilityRules } from "@/lib/availability-server";
 import { slotFitsAvailability } from "@/lib/availability-time";
-import { bookingDayConflict } from "@/lib/booking-capacity";
 import { companyIdForExperience } from "@/lib/data";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { whop } from "@/lib/whop";
@@ -117,26 +116,6 @@ export async function POST(
     }
 
     const end = new Date(start.getTime() + offer.duration_minutes * 60_000);
-    const conflict = await bookingDayConflict({
-      supabase,
-      companyId,
-      userId: viewer.userId,
-      startsAt: start,
-      timezone: booking.timezone || "America/Chicago",
-      ignoreBookingId: id,
-    });
-    if (conflict === "MEMBER_DAILY_LIMIT") {
-      return Response.json(
-        { error: "You already have another booking on that day." },
-        { status: 409 },
-      );
-    }
-    if (conflict === "DAY_AT_CAPACITY") {
-      return Response.json(
-        { error: "That day has reached its booking capacity." },
-        { status: 409 },
-      );
-    }
     const rules = await getApplicableAvailabilityRules(
       supabase,
       companyId,
@@ -150,41 +129,46 @@ export async function POST(
       );
     }
 
-    const blocked = await supabase.rpc("is_booking_slot_blocked", {
-      p_company_id: companyId,
-      p_offer_id: booking.offer_id,
-      p_coach_id: booking.coach_id,
-      p_starts_at: new Date(
-        start.getTime() - offer.buffer_before_minutes * 60_000,
-      ).toISOString(),
-      p_ends_at: new Date(
-        end.getTime() + offer.buffer_after_minutes * 60_000,
-      ).toISOString(),
-      p_ignore_booking_id: id,
-    });
-    if (blocked.error) throw blocked.error;
-    if (blocked.data) {
+    const { error: rescheduleError } = await supabase.rpc(
+      "reschedule_booking_request_atomic",
+      {
+        p_booking_id: id,
+        p_company_id: companyId,
+        p_user_id: viewer.userId,
+        p_starts_at: start.toISOString(),
+        p_ends_at: end.toISOString(),
+        p_timezone: booking.timezone || "America/Chicago",
+      },
+    );
+    if (rescheduleError?.message.includes("MEMBER_DAILY_LIMIT")) {
+      return Response.json(
+        { error: "You already have another booking on that day." },
+        { status: 409 },
+      );
+    }
+    if (rescheduleError?.message.includes("DAY_AT_CAPACITY")) {
+      return Response.json(
+        { error: "That day has reached its booking capacity." },
+        { status: 409 },
+      );
+    }
+    if (rescheduleError?.message.includes("SLOT_UNAVAILABLE")) {
       return Response.json(
         { error: "That time is unavailable." },
         { status: 409 },
       );
     }
+    if (rescheduleError) throw rescheduleError;
 
     const { data, error: updateError } = await supabase
       .from("booking_requests")
-      .update({
-        status: "reschedule_requested",
-        requested_start_at: start.toISOString(),
-        requested_end_at: end.toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", id)
-      .eq("status", "confirmed")
       .select(
         "*, booking_offers(title,duration_minutes,price_cents,access_mode)",
       )
+      .eq("id", id)
+      .eq("whop_company_id", companyId)
       .single();
-    if (updateError) throw updateError;
+    if (updateError || !data) throw updateError ?? new Error("Booking not found.");
 
     await supabase.from("booking_messages").insert({
       booking_request_id: id,
