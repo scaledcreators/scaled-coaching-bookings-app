@@ -154,3 +154,14 @@ export function archiveBookingError(booking: {
   }
   return null;
 }
+
+export function permanentDeleteBookingError(booking: {
+  status: string;
+  refund_status?: string | null;
+  admin_archived_at?: string | null;
+}) {
+  if (!booking.admin_archived_at) {
+    return "Move this booking to Trash before deleting it forever.";
+  }
+  return archiveBookingError(booking);
+}

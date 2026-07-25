@@ -20,6 +20,7 @@ import {
 } from "@/components/booking-calendar";
 import { DEFAULT_SUPPORT_CONTACT } from "@/lib/constants";
 import { AppBrand } from "@/components/app-brand";
+import { OverlayPortal } from "@/components/overlay-portal";
 import {
   TenantThemeProvider,
   useTenantTheme,
@@ -32,6 +33,7 @@ import {
   bookingStatusLabel,
   bookingStatusTone,
 } from "@/lib/booking-status";
+import { formatPaymentTimeRemaining } from "@/lib/payment-countdown";
 
 const money = (cents: number) =>
   cents === 0
@@ -398,6 +400,19 @@ function MyBookings({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [payingId, setPayingId] = useState<string | null>(null);
+  const [countdownNow, setCountdownNow] = useState<number | null>(null);
+  const hasPaymentCountdown = bookings.some(
+    (booking) =>
+      booking.status === "pending_payment" && Boolean(booking.payment_due_at),
+  );
+
+  useEffect(() => {
+    if (!hasPaymentCountdown) return;
+    const updateCountdown = () => setCountdownNow(Date.now());
+    updateCountdown();
+    const interval = window.setInterval(updateCountdown, 30_000);
+    return () => window.clearInterval(interval);
+  }, [hasPaymentCountdown]);
 
   async function beginPayment(booking: Booking) {
     setPayingId(booking.id);
@@ -557,20 +572,37 @@ function MyBookings({
                 booking.meeting_url ||
                 booking.manual_join_instructions,
             );
+          const paymentTimeRemaining =
+            booking.status === "pending_payment" &&
+            booking.payment_due_at &&
+            countdownNow !== null
+              ? formatPaymentTimeRemaining(
+                  booking.payment_due_at,
+                  countdownNow,
+                )
+              : null;
           return (
             <article
               className={`member-booking-card sc-card ${hasMeetingDetails ? "has-meeting-details" : "single-column"}`}
               key={booking.id}
             >
               <div>
-                <span
-                  className={`health-badge ${bookingStatusTone(booking.status)}`}
-                >
-                  {booking.refund_status &&
-                  booking.refund_status !== "not_requested"
-                    ? `refund ${booking.refund_status}`
-                    : bookingStatusLabel(booking.status)}
-                </span>
+                <div className="booking-card-status-row">
+                  <span
+                    className={`health-badge ${bookingStatusTone(booking.status)}`}
+                  >
+                    {booking.refund_status &&
+                    booking.refund_status !== "not_requested"
+                      ? `refund ${booking.refund_status}`
+                      : bookingStatusLabel(booking.status)}
+                  </span>
+                  {paymentTimeRemaining && (
+                    <span className="payment-countdown-chip">
+                      <Clock3 size={13} aria-hidden />
+                      {paymentTimeRemaining}
+                    </span>
+                  )}
+                </div>
                 <h2>{booking.booking_offers?.title}</h2>
                 <p>
                   {booking.requested_start_at
@@ -597,10 +629,9 @@ function MyBookings({
                   </div>
                 )}
                 {booking.status === "pending_payment" && (
-                  <div className="booking-state-note payment-ready">
-                    <strong>Your request was approved</strong>
-                    <span>
-                      Complete payment
+                  <>
+                    <p className="payment-approval-copy">
+                      Your request was approved. Complete payment
                       {booking.payment_due_at
                         ? ` by ${new Intl.DateTimeFormat("en-US", {
                             dateStyle: "medium",
@@ -609,18 +640,28 @@ function MyBookings({
                           }).format(new Date(booking.payment_due_at))}`
                         : " within 24 hours"}
                       {" to confirm this time."}
-                    </span>
-                    <button
-                      className="sc-btn-primary"
-                      disabled={payingId === booking.id}
-                      onClick={() => beginPayment(booking)}
-                    >
-                      {payingId === booking.id
-                        ? "Opening Whop…"
-                        : "Complete payment"}
-                      <ArrowRight size={15} />
-                    </button>
-                  </div>
+                    </p>
+                    <div className="payment-action-row">
+                      <button
+                        className="payment-cancel-button"
+                        onClick={() =>
+                          setDialog({ type: "cancel", booking })
+                        }
+                      >
+                        Cancel booking
+                      </button>
+                      <button
+                        className="sc-btn-primary"
+                        disabled={payingId === booking.id}
+                        onClick={() => beginPayment(booking)}
+                      >
+                        {payingId === booking.id
+                          ? "Opening Whop…"
+                          : "Complete payment"}
+                        <ArrowRight size={15} />
+                      </button>
+                    </div>
+                  </>
                 )}
                 {booking.status === "rejected" && (
                   <div className="booking-state-note closed">
@@ -658,7 +699,9 @@ function MyBookings({
                       Cancel & request refund
                     </button>
                   )}
-                  {active && !booking.whop_payment_id && (
+                  {active &&
+                    !booking.whop_payment_id &&
+                    booking.status !== "pending_payment" && (
                     <button
                       onClick={() => setDialog({ type: "cancel", booking })}
                     >
@@ -890,28 +933,48 @@ function BookingFlow({
   }
   if (sent)
     return (
-      <div className="modal-backdrop">
-        <div className="booking-modal sc-card success-modal">
-          <span className="success-icon">
-            <Check size={28} />
-          </span>
-          <p className="eyebrow">Request received</p>
-          <h2>Your request is in.</h2>
-          <p>
-            No payment was taken. The coach will review your request first, and
-            paid sessions will give you up to 24 hours to pay after approval.
-          </p>
-          <button className="sc-btn-primary" onClick={onClose}>
-            View my bookings
-          </button>
+      <OverlayPortal>
+        <div className="modal-backdrop success-backdrop">
+          <section
+            className="booking-modal sc-card success-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="request-success-title"
+          >
+            <span className="success-icon" aria-hidden>
+              <Check size={27} strokeWidth={2.4} />
+            </span>
+            <div className="success-copy" aria-live="polite">
+              <p className="eyebrow">Request received</p>
+              <h2 id="request-success-title">You’re all set for now.</h2>
+              <p>
+                {offer.price_cents > 0
+                  ? "No payment has been taken. If approved, you’ll have up to 24 hours to pay and confirm your time."
+                  : "No payment is needed. Your session will be confirmed as soon as the coach approves your request."}
+              </p>
+            </div>
+            <div className="success-next-step">
+              <span aria-hidden>
+                <Clock3 size={18} />
+              </span>
+              <div>
+                <small>Next step</small>
+                <strong>Waiting for coach approval</strong>
+              </div>
+            </div>
+            <button className="sc-btn-primary" onClick={onClose}>
+              View my bookings <ArrowRight size={16} />
+            </button>
+          </section>
         </div>
-      </div>
+      </OverlayPortal>
     );
   return (
-    <div className="modal-backdrop">
-      <section
-        className={`booking-modal sc-card ${step === 1 ? "calendar-booking-modal" : ""}`}
-      >
+    <OverlayPortal>
+      <div className="modal-backdrop">
+        <section
+          className={`booking-modal sc-card ${step === 1 ? "calendar-booking-modal" : ""}`}
+        >
         <header className="booking-modal-head">
           <button
             className="icon-button"
@@ -1036,7 +1099,8 @@ function BookingFlow({
             </button>
           </div>
         )}
-      </section>
-    </div>
+        </section>
+      </div>
+    </OverlayPortal>
   );
 }

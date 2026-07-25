@@ -391,6 +391,25 @@ function AdminDashboardContent({
     );
     void refresh();
   }
+  async function deleteBookingForever(id: string) {
+    setActionError("");
+    if (initialData.demo) {
+      setBookings((items) => items.filter((item) => item.id !== id));
+      return;
+    }
+    const response = await fetch(`/api/booking-requests/${id}/archive`, {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ companyId: initialData.companyId }),
+    });
+    const body = await response.json();
+    if (!response.ok) {
+      setActionError(body.error || "Could not permanently delete booking.");
+      return;
+    }
+    setBookings((items) => items.filter((item) => item.id !== body.deletedId));
+    void refresh();
+  }
   async function togglePause() {
     const next = !paused;
     setPaused(next);
@@ -509,6 +528,7 @@ function AdminDashboardContent({
             onRefund={issueRefund}
             onTransition={transitionBooking}
             onArchive={archiveBooking}
+            onDelete={deleteBookingForever}
           />
         )}
         {section === "offers" && (
@@ -943,6 +963,7 @@ function BookingsBoard({
   onRefund,
   onTransition,
   onArchive,
+  onDelete,
 }: {
   bookings: Booking[];
   error: string;
@@ -954,6 +975,7 @@ function BookingsBoard({
     action: "complete" | "no_show" | "cancel",
   ) => void;
   onArchive: (id: string, action: "archive" | "restore") => void;
+  onDelete: (id: string) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showTrash, setShowTrash] = useState(false);
@@ -962,7 +984,7 @@ function BookingsBoard({
   const [closeBooking, setCloseBooking] = useState<Booking | null>(null);
   const [confirmAction, setConfirmAction] = useState<{
     booking: Booking;
-    kind: "reject" | "cancel" | "refund" | "archive";
+    kind: "reject" | "cancel" | "refund" | "archive" | "delete_forever";
   } | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -1004,7 +1026,7 @@ function BookingsBoard({
 
   function requestConfirmation(
     booking: Booking,
-    kind: "reject" | "cancel" | "refund" | "archive",
+    kind: "reject" | "cancel" | "refund" | "archive" | "delete_forever",
   ) {
     setLocalMessage("");
     setConfirmAction({ booking, kind });
@@ -1118,6 +1140,7 @@ function BookingsBoard({
     if (kind === "cancel") onTransition(booking.id, "cancel");
     if (kind === "refund") onRefund(booking.id);
     if (kind === "archive") onArchive(booking.id, "archive");
+    if (kind === "delete_forever") onDelete(booking.id);
     setConfirmAction(null);
   }
 
@@ -1142,6 +1165,11 @@ function BookingsBoard({
           title: "Move this record to Trash?",
           description: "It will leave the active board but remain in the audit and payment history. You can restore it later.",
           label: "Move to Trash",
+        },
+        delete_forever: {
+          title: "Delete this booking forever?",
+          description: "This permanently deletes the booking and its messages from this app. Whop transaction records remain in Whop. This cannot be undone.",
+          label: "Delete forever",
         },
       }[confirmAction.kind]
     : null;
@@ -1179,9 +1207,14 @@ function BookingsBoard({
                   <strong>{booking.booking_offers?.title ?? "Coaching session"}</strong>
                   <p>{bookingMemberLabel(booking)} · {formatDate(booking.requested_start_at)}</p>
                 </div>
-                <button className="sc-btn-secondary" onClick={() => onArchive(booking.id, "restore")}>
-                  <ArchiveRestore size={15} /> Restore
-                </button>
+                <div className="archived-booking-actions">
+                  <button className="sc-btn-secondary" onClick={() => onArchive(booking.id, "restore")}>
+                    <ArchiveRestore size={15} /> Restore
+                  </button>
+                  <button className="sc-btn-danger" onClick={() => requestConfirmation(booking, "delete_forever")}>
+                    <Trash2 size={15} /> Delete forever
+                  </button>
+                </div>
               </div>
             ))
           )}

@@ -5,6 +5,7 @@ import {
   bookingDatesInTimezone,
   bookingReservesCapacity,
   dailyCapacityConflict,
+  permanentDeleteBookingError,
 } from "@/lib/booking-lifecycle";
 
 const now = new Date("2026-07-23T12:00:00.000Z");
@@ -122,6 +123,28 @@ describe("admin booking lifecycle safeguards", () => {
       archiveBookingError({
         status: "cancelled",
         refund_status: "processing",
+      }),
+    ).toContain("refund workflow");
+  });
+
+  it("only permanently deletes closed records that are already in Trash", () => {
+    expect(
+      permanentDeleteBookingError({
+        status: "completed",
+        admin_archived_at: "2026-07-24T12:00:00.000Z",
+      }),
+    ).toBeNull();
+    expect(
+      permanentDeleteBookingError({
+        status: "completed",
+        admin_archived_at: null,
+      }),
+    ).toContain("Trash");
+    expect(
+      permanentDeleteBookingError({
+        status: "cancelled",
+        refund_status: "processing",
+        admin_archived_at: "2026-07-24T12:00:00.000Z",
       }),
     ).toContain("refund workflow");
   });

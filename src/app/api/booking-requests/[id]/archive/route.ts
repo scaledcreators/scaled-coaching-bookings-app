@@ -1,11 +1,18 @@
 import { z } from "zod";
 import { requireRequestViewer } from "@/lib/auth";
-import { archiveBookingError } from "@/lib/booking-lifecycle";
+import {
+  archiveBookingError,
+  permanentDeleteBookingError,
+} from "@/lib/booking-lifecycle";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
 const schema = z.object({
   companyId: z.string().startsWith("biz_"),
   action: z.enum(["archive", "restore"]),
+});
+
+const deleteSchema = z.object({
+  companyId: z.string().startsWith("biz_"),
 });
 
 export async function POST(
@@ -55,6 +62,52 @@ export async function POST(
       {
         error:
           error instanceof Error ? error.message : "Could not update Trash.",
+      },
+      { status: 400 },
+    );
+  }
+}
+
+export async function DELETE(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const { id } = await params;
+    const input = deleteSchema.parse(await request.json());
+    await requireRequestViewer(request, input.companyId, true);
+    const supabase = getSupabaseAdmin();
+    const { data: booking, error: bookingError } = await supabase
+      .from("booking_requests")
+      .select("id,status,refund_status,admin_archived_at")
+      .eq("id", id)
+      .eq("whop_company_id", input.companyId)
+      .single();
+    if (bookingError || !booking) throw new Error("Booking not found.");
+
+    const deleteError = permanentDeleteBookingError(booking);
+    if (deleteError) {
+      return Response.json({ error: deleteError }, { status: 409 });
+    }
+
+    const { data: deleted, error } = await supabase
+      .from("booking_requests")
+      .delete()
+      .eq("id", id)
+      .eq("whop_company_id", input.companyId)
+      .not("admin_archived_at", "is", null)
+      .select("id")
+      .single();
+    if (error || !deleted) throw error ?? new Error("Booking not found.");
+
+    return Response.json({ deletedId: deleted.id });
+  } catch (error) {
+    return Response.json(
+      {
+        error:
+          error instanceof Error
+            ? error.message
+            : "Could not permanently delete booking.",
       },
       { status: 400 },
     );
