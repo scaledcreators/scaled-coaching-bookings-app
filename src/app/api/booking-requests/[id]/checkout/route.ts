@@ -1,7 +1,9 @@
 import { z } from "zod";
 import { requireRequestViewer } from "@/lib/auth";
 import {
+  buildCheckoutRedirectUrl,
   checkoutErrorMessage,
+  checkoutReturnOrigin,
   createBookingCheckout,
 } from "@/lib/booking-checkout";
 import { notifyCustomer } from "@/lib/booking-notifications";
@@ -12,6 +14,22 @@ import { whop } from "@/lib/whop";
 const schema = z.object({
   experienceId: z.string().startsWith("exp_"),
 });
+
+function checkoutResponse(
+  request: Request,
+  experienceId: string,
+  sessionId: string,
+  checkoutUrl: string,
+) {
+  return Response.json({
+    checkoutSessionId: sessionId,
+    checkoutUrl,
+    returnUrl: buildCheckoutRedirectUrl(
+      checkoutReturnOrigin(request),
+      experienceId,
+    ),
+  });
+}
 
 export async function POST(
   request: Request,
@@ -95,8 +113,16 @@ export async function POST(
       );
     }
 
-    if (booking.payment_checkout_url) {
-      return Response.json({ checkoutUrl: booking.payment_checkout_url });
+    if (
+      booking.payment_checkout_url &&
+      booking.whop_checkout_configuration_id
+    ) {
+      return checkoutResponse(
+        request,
+        input.experienceId,
+        booking.whop_checkout_configuration_id,
+        booking.payment_checkout_url,
+      );
     }
 
     const claimToken = crypto.randomUUID();
@@ -112,11 +138,19 @@ export async function POST(
     if (!claimed) {
       const { data: latest } = await supabase
         .from("booking_requests")
-        .select("payment_checkout_url")
+        .select("payment_checkout_url, whop_checkout_configuration_id")
         .eq("id", booking.id)
         .maybeSingle();
-      if (latest?.payment_checkout_url) {
-        return Response.json({ checkoutUrl: latest.payment_checkout_url });
+      if (
+        latest?.payment_checkout_url &&
+        latest.whop_checkout_configuration_id
+      ) {
+        return checkoutResponse(
+          request,
+          input.experienceId,
+          latest.whop_checkout_configuration_id,
+          latest.payment_checkout_url,
+        );
       }
       return Response.json(
         {
@@ -130,7 +164,6 @@ export async function POST(
     let checkout;
     try {
       checkout = await createBookingCheckout({
-        request,
         booking,
         offer: booking.booking_offers,
       });
@@ -185,7 +218,12 @@ export async function POST(
       );
     }
 
-    return Response.json({ checkoutUrl: checkout.purchase_url });
+    return checkoutResponse(
+      request,
+      input.experienceId,
+      checkout.id,
+      checkout.purchase_url,
+    );
   } catch (error) {
     return Response.json(
       { error: checkoutErrorMessage(error) },

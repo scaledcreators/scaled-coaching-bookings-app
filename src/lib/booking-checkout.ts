@@ -17,21 +17,11 @@ export function normalizeSecureOrigin(value: string | undefined) {
 }
 
 export function checkoutReturnOrigin(request: Request) {
-  const explicitlyConfigured = process.env.NEXT_PUBLIC_APP_URL;
-  if (explicitlyConfigured) {
-    const origin = normalizeSecureOrigin(explicitlyConfigured);
-    if (!origin) {
-      throw new Error("The configured app URL must use HTTPS.");
-    }
-    return origin;
-  }
-
   const candidates = [
     process.env.VERCEL_PROJECT_PRODUCTION_URL,
     process.env.VERCEL_URL,
-    process.env.NODE_ENV === "production"
-      ? PRODUCTION_ORIGIN
-      : new URL(request.url).origin,
+    PRODUCTION_ORIGIN,
+    new URL(request.url).origin,
   ];
 
   for (const candidate of candidates) {
@@ -85,11 +75,9 @@ function checkoutDiagnosticMessage(error: unknown) {
 }
 
 export async function createBookingCheckout({
-  request,
   booking,
   offer,
 }: {
-  request: Request;
   booking: Booking;
   offer: Offer;
 }) {
@@ -99,12 +87,6 @@ export async function createBookingCheckout({
   if (!booking.whop_experience_id) {
     throw new Error("This booking is not connected to a Whop experience.");
   }
-
-  const origin = checkoutReturnOrigin(request);
-  const redirectUrl = buildCheckoutRedirectUrl(
-    origin,
-    booking.whop_experience_id,
-  );
 
   try {
     return await whop.checkoutConfigurations.create({
@@ -122,7 +104,6 @@ export async function createBookingCheckout({
             product_id: offer.whop_product_id || undefined,
           },
       plan_id: offer.whop_plan_id || undefined,
-      redirect_url: redirectUrl,
       metadata: {
         offer_id: offer.id,
         booking_request_id: booking.id,
@@ -133,7 +114,6 @@ export async function createBookingCheckout({
   } catch (error) {
     console.error("Whop booking checkout creation failed", {
       bookingId: booking.id,
-      origin,
       message: checkoutDiagnosticMessage(error),
     });
     throw error;

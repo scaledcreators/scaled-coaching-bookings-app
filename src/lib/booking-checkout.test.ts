@@ -8,19 +8,24 @@ vi.mock("@/lib/whop", () => ({
 import {
   buildCheckoutRedirectUrl,
   checkoutErrorMessage,
+  checkoutReturnOrigin,
   normalizeSecureOrigin,
   createBookingCheckout,
 } from "@/lib/booking-checkout";
 
-const originalAppUrl = process.env.NEXT_PUBLIC_APP_URL;
 const originalApiKey = process.env.WHOP_API_KEY;
+const originalProductionUrl = process.env.VERCEL_PROJECT_PRODUCTION_URL;
+const originalVercelUrl = process.env.VERCEL_URL;
 
 afterEach(() => {
   mocks.create.mockReset();
-  if (originalAppUrl === undefined) delete process.env.NEXT_PUBLIC_APP_URL;
-  else process.env.NEXT_PUBLIC_APP_URL = originalAppUrl;
   if (originalApiKey === undefined) delete process.env.WHOP_API_KEY;
   else process.env.WHOP_API_KEY = originalApiKey;
+  if (originalProductionUrl === undefined)
+    delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
+  else process.env.VERCEL_PROJECT_PRODUCTION_URL = originalProductionUrl;
+  if (originalVercelUrl === undefined) delete process.env.VERCEL_URL;
+  else process.env.VERCEL_URL = originalVercelUrl;
 });
 
 describe("Whop checkout return URLs", () => {
@@ -45,6 +50,16 @@ describe("Whop checkout return URLs", () => {
     );
   });
 
+  it("does not require a separate app URL environment variable", () => {
+    delete process.env.VERCEL_PROJECT_PRODUCTION_URL;
+    delete process.env.VERCEL_URL;
+    expect(
+      checkoutReturnOrigin(
+        new Request("http://localhost:3000/api/booking-requests/example/checkout"),
+      ),
+    ).toBe("https://scaled-coaching-bookings-app.vercel.app");
+  });
+
   it("extracts a customer-safe Whop error message", () => {
     expect(
       checkoutErrorMessage(
@@ -57,9 +72,7 @@ describe("Whop checkout return URLs", () => {
     );
   });
 
-  it("sends Whop the exact HTTPS redirect and booking metadata", async () => {
-    process.env.NEXT_PUBLIC_APP_URL =
-      ' "https://scaled-coaching-bookings-app.vercel.app/" ';
+  it("creates an embeddable payment session with booking metadata", async () => {
     process.env.WHOP_API_KEY = "test_key";
     mocks.create.mockResolvedValue({
       id: "checkout_1",
@@ -83,16 +96,14 @@ describe("Whop checkout return URLs", () => {
     } as Offer;
 
     await createBookingCheckout({
-      request: new Request("http://localhost:3000/api/checkout"),
       booking,
       offer,
     });
 
-    expect(mocks.create).toHaveBeenCalledWith(
+    const payload = mocks.create.mock.calls[0]?.[0];
+    expect(payload).toEqual(
       expect.objectContaining({
         mode: "payment",
-        redirect_url:
-          "https://scaled-coaching-bookings-app.vercel.app/experiences/exp_example?checkout=complete",
         metadata: {
           offer_id: offer.id,
           booking_request_id: booking.id,
@@ -101,5 +112,6 @@ describe("Whop checkout return URLs", () => {
         },
       }),
     );
+    expect(payload).not.toHaveProperty("redirect_url");
   });
 });

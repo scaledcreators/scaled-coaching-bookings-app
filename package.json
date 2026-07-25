@@ -14,6 +14,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@supabase/supabase-js": "^2.110.8",
     "@vercel/functions": "^3.7.5",
+    "@whop/checkout": "^0.4.0",
     "@whop/sdk": "^0.0.41",
     "date-fns": "^4.4.0",
     "lucide-react": "^1.25.0",
