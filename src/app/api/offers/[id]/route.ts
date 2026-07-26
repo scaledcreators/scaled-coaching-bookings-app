@@ -13,9 +13,9 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const removed = await supabase.from("offer_coaches").delete().eq("offer_id", id); if (removed.error) throw removed.error;
     const linked = await supabase.from("offer_coaches").insert({ offer_id: id, coach_id: coach.id }); if (linked.error) throw linked.error;
     return Response.json({ offer: { ...offer, coach_ids: [coach.id] } });
-  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Could not update offer." }, { status: 400 }); }
+  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Could not update session." }, { status: 400 }); }
 }
 
 export async function DELETE(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  try { const { id } = await params; const companyId = new URL(request.url).searchParams.get("companyId"); if (!companyId) throw new Error("companyId is required."); await requireRequestViewer(request, companyId, true); const { error } = await getSupabaseAdmin().from("booking_offers").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", id).eq("whop_company_id", companyId); if (error) throw error; return new Response(null, { status: 204 }); } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Could not archive offer." }, { status: 400 }); }
+  try { const { id } = await params; const companyId = new URL(request.url).searchParams.get("companyId"); if (!companyId) throw new Error("companyId is required."); await requireRequestViewer(request, companyId, true); const { error } = await getSupabaseAdmin().from("booking_offers").update({ status: "archived", updated_at: new Date().toISOString() }).eq("id", id).eq("whop_company_id", companyId); if (error) throw error; return new Response(null, { status: 204 }); } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Could not archive session." }, { status: 400 }); }
 }

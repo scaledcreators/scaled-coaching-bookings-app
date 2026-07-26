@@ -9,7 +9,7 @@ export const offerInput = z.object({
   pricing: z.enum(["free", "paid"]), priceCents: z.number().int().min(0), status: z.enum(["draft", "published"]).default("published"),
   minNoticeHours: z.number().int().min(0).default(24),
   maxAdvanceDays: z.number().int().min(1).default(60), bufferBeforeMinutes: z.number().int().min(0).default(0), bufferAfterMinutes: z.number().int().min(0).default(15),
-}).superRefine((value, ctx) => { if (value.pricing === "paid" && value.priceCents < 50) ctx.addIssue({ code: "custom", path: ["priceCents"], message: "Paid offers need an amount of at least $0.50." }); });
+}).superRefine((value, ctx) => { if (value.pricing === "paid" && value.priceCents < 50) ctx.addIssue({ code: "custom", path: ["priceCents"], message: "Paid sessions need an amount of at least $0.50." }); });
 
 export async function POST(request: Request) {
   try {
@@ -31,5 +31,5 @@ export async function POST(request: Request) {
     });
     if (linked.error) throw linked.error;
     return Response.json({ offer: { ...offer, coach_ids: [coach.id] } }, { status: 201 });
-  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Could not create offer." }, { status: 400 }); }
+  } catch (error) { return Response.json({ error: error instanceof Error ? error.message : "Could not create session." }, { status: 400 }); }
 }

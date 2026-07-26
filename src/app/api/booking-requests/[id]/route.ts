@@ -78,7 +78,7 @@ export async function PATCH(
             .eq("whop_company_id", input.companyId)
             .maybeSingle(),
         ]);
-      if (offerError || !offer) throw new Error("Offer not found.");
+      if (offerError || !offer) throw new Error("Session not found.");
       const start = new Date(input.requestedStartAt);
       const end = new Date(
         start.getTime() + offer.duration_minutes * 60_000,

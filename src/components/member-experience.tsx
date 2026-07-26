@@ -277,7 +277,7 @@ function Offers({
       ) : offers.length === 0 ? (
         <div className="notice-empty member-offers-empty sc-card">
           <CalendarDays />
-          <strong>Coaching offers are coming soon</strong>
+          <strong>Coaching sessions are coming soon</strong>
           <p>
             There aren’t any sessions available to request yet. Check back
             shortly or use Help to contact the team.
@@ -364,7 +364,7 @@ function HelpDialog({
           <div>
             <strong>Contact the coaching team</strong>
             <p>
-              Questions about an offer, booking, meeting details, or refund?
+              Questions about a session, booking, meeting details, or refund?
               Send us an email and include any useful context.
             </p>
             <a className="sc-btn-primary" href={`mailto:${supportContact}`}>
@@ -586,7 +586,7 @@ function MyBookings({
           <div className="notice-empty sc-card">
             <CalendarDays />
             <strong>No sessions yet</strong>
-            <p>Choose a coaching offer when you’re ready.</p>
+            <p>Choose a coaching session when you’re ready.</p>
           </div>
         )}
         {bookingGroups.map((group) => (

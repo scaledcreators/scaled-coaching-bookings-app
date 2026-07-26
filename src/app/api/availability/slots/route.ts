@@ -72,7 +72,7 @@ export async function GET(request: Request) {
           .eq("whop_company_id", companyId)
           .maybeSingle(),
       ]);
-    if (offerError || !offer) throw new Error("Offer not found.");
+    if (offerError || !offer) throw new Error("Session not found.");
     if (settingsError) throw settingsError;
 
     const coach = await getSingleActiveCoach(supabase, companyId);

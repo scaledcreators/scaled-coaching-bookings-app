@@ -49,7 +49,7 @@ export async function POST(request: Request) {
     ]);
 
     if (settingsError || offerError || !offer) {
-      throw new Error("This offer is not available.");
+      throw new Error("This session is not available.");
     }
     if (settings?.emergency_paused) {
       return Response.json(
@@ -69,7 +69,7 @@ export async function POST(request: Request) {
     const latest = Date.now() + offer.max_advance_days * 86_400_000;
     if (startsAt.getTime() < earliest || startsAt.getTime() > latest) {
       return Response.json(
-        { error: "That time is outside this offer’s booking window." },
+        { error: "That time is outside this session’s booking window." },
         { status: 409 },
       );
     }

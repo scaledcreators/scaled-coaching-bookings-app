@@ -118,7 +118,7 @@ export function OfferManager({
       setOpen(false);
     } catch (reason) {
       setError(
-        reason instanceof Error ? reason.message : "Could not save offer.",
+        reason instanceof Error ? reason.message : "Could not save session.",
       );
     } finally {
       setSaving(false);
@@ -136,7 +136,7 @@ export function OfferManager({
         );
         if (!response.ok) {
           const payload = await response.json();
-          throw new Error(payload.error || "Could not archive offer.");
+          throw new Error(payload.error || "Could not archive session.");
         }
       }
       onOffersChange?.(
@@ -145,7 +145,7 @@ export function OfferManager({
       setPendingArchive(null);
     } catch (reason) {
       setError(
-        reason instanceof Error ? reason.message : "Could not archive offer.",
+        reason instanceof Error ? reason.message : "Could not archive session.",
       );
     } finally {
       setArchiving(false);
@@ -156,19 +156,19 @@ export function OfferManager({
       <header className="section-page-heading split-heading">
         <div>
           <p className="eyebrow">Products & payments</p>
-          <h2>Coaching offers</h2>
+          <h2>Coaching sessions</h2>
           <p>
             Create the sessions customers can request, with pricing and booking
             rules for your coaching calendar.
           </p>
         </div>
         <button className="sc-btn-primary" onClick={create}>
-          <Plus size={16} /> New offer
+          <Plus size={16} /> New session
         </button>
       </header>
       <section className="panel offers-management">
         <div className="offers-list-heading">
-          <span>Offer</span>
+          <span>Session</span>
           <span>Delivery</span>
           <span>Price</span>
           <span>Status</span>
@@ -177,10 +177,10 @@ export function OfferManager({
         {offers.length === 0 && (
           <div className="offers-empty">
             <CircleDollarSignIcon />
-            <strong>No offers yet</strong>
-            <p>Create your first free or paid coaching offer.</p>
+            <strong>No sessions yet</strong>
+            <p>Create your first free or paid coaching session.</p>
             <button className="sc-btn-primary" onClick={create}>
-              Create offer
+              Create session
             </button>
           </div>
         )}
@@ -235,8 +235,8 @@ export function OfferManager({
           <form className="modal sc-card offer-modal" onSubmit={submit}>
             <div className="panel-heading">
               <div>
-                <p className="eyebrow">Coaching product</p>
-                <h2>{editingId ? "Edit offer" : "Create offer"}</h2>
+                <p className="eyebrow">Bookable session</p>
+                <h2>{editingId ? "Edit session" : "Create session"}</h2>
                 <p>Set the customer-facing details and booking rules.</p>
               </div>
               <button
@@ -249,11 +249,11 @@ export function OfferManager({
             </div>
             <section className="form-section">
               <div className="form-section-heading">
-                <strong>Offer details</strong>
+                <strong>Session details</strong>
                 <span>What customers will see before requesting.</span>
               </div>
               <div className="field">
-                <label>Offer name</label>
+                <label>Session name</label>
                 <input
                   value={form.title}
                   onChange={(event) =>
@@ -308,7 +308,7 @@ export function OfferManager({
               <div className="form-section-heading">
                 <strong>Pricing</strong>
                 <span>
-                  Paid offers request payment only after you approve the booking.
+                  Paid sessions request payment only after you approve the booking.
                 </span>
               </div>
               <div className="choice-row pricing-choice">
@@ -419,7 +419,7 @@ export function OfferManager({
                 Cancel
               </button>
               <button className="sc-btn-primary" disabled={saving}>
-                {saving ? "Saving…" : "Save offer"}
+                {saving ? "Saving…" : "Save session"}
               </button>
             </div>
           </form>
@@ -429,8 +429,8 @@ export function OfferManager({
       {pendingArchive && (
         <ConfirmDialog
           title={`Archive “${pendingArchive.title}”?`}
-          description="This removes the offer from the customer page immediately. Existing booking history stays intact."
-          confirmLabel="Archive offer"
+          description="This removes the session from the customer page immediately. Existing booking history stays intact."
+          confirmLabel="Archive session"
           busy={archiving}
           onClose={() => setPendingArchive(null)}
           onConfirm={archive}
