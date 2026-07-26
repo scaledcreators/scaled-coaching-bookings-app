@@ -1,9 +1,7 @@
 import { z } from "zod";
 import { requireRequestViewer } from "@/lib/auth";
 import {
-  buildCheckoutRedirectUrl,
   checkoutErrorMessage,
-  checkoutReturnOrigin,
   createBookingCheckout,
 } from "@/lib/booking-checkout";
 import { notifyCustomer } from "@/lib/booking-notifications";
@@ -15,19 +13,23 @@ const schema = z.object({
   experienceId: z.string().startsWith("exp_"),
 });
 
-function checkoutResponse(
-  request: Request,
-  experienceId: string,
+async function checkoutResponse(
   sessionId: string,
   checkoutUrl: string,
+  planId?: string | null,
 ) {
+  let resolvedPlanId = planId;
+  if (!resolvedPlanId) {
+    const checkout = await whop.checkoutConfigurations.retrieve(sessionId);
+    resolvedPlanId = checkout.plan?.id;
+  }
+  if (!resolvedPlanId) {
+    throw new Error("Whop did not return a plan for this checkout.");
+  }
   return Response.json({
     checkoutSessionId: sessionId,
     checkoutUrl,
-    returnUrl: buildCheckoutRedirectUrl(
-      checkoutReturnOrigin(request),
-      experienceId,
-    ),
+    planId: resolvedPlanId,
   });
 }
 
@@ -117,11 +119,10 @@ export async function POST(
       booking.payment_checkout_url &&
       booking.whop_checkout_configuration_id
     ) {
-      return checkoutResponse(
-        request,
-        input.experienceId,
+      return await checkoutResponse(
         booking.whop_checkout_configuration_id,
         booking.payment_checkout_url,
+        booking.booking_offers.whop_plan_id,
       );
     }
 
@@ -145,9 +146,7 @@ export async function POST(
         latest?.payment_checkout_url &&
         latest.whop_checkout_configuration_id
       ) {
-        return checkoutResponse(
-          request,
-          input.experienceId,
+        return await checkoutResponse(
           latest.whop_checkout_configuration_id,
           latest.payment_checkout_url,
         );
@@ -218,11 +217,10 @@ export async function POST(
       );
     }
 
-    return checkoutResponse(
-      request,
-      input.experienceId,
+    return await checkoutResponse(
       checkout.id,
       checkout.purchase_url,
+      checkout.plan?.id,
     );
   } catch (error) {
     return Response.json(

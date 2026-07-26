@@ -1,6 +1,5 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
-import { WhopCheckoutEmbed } from "@whop/checkout/react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -35,6 +34,7 @@ import {
   bookingStatusTone,
 } from "@/lib/booking-status";
 import { formatPaymentTimeRemaining } from "@/lib/payment-countdown";
+import { getIframeSdk } from "@/lib/iframe-sdk";
 
 const money = (cents: number) =>
   cents === 0
@@ -401,9 +401,9 @@ function MyBookings({
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
   const [payingId, setPayingId] = useState<string | null>(null);
-  const [checkoutSession, setCheckoutSession] = useState<{
-    sessionId: string;
-    returnUrl: string;
+  const [fallbackCheckout, setFallbackCheckout] = useState<{
+    bookingId: string;
+    url: string;
   } | null>(null);
   const [paymentNotice, setPaymentNotice] = useState("");
   const [countdownNow, setCountdownNow] = useState<number | null>(null);
@@ -423,6 +423,7 @@ function MyBookings({
   async function beginPayment(booking: Booking) {
     setPayingId(booking.id);
     setError("");
+    setFallbackCheckout(null);
     try {
       const response = await fetch(
         `/api/booking-requests/${booking.id}/checkout`,
@@ -432,7 +433,12 @@ function MyBookings({
           body: JSON.stringify({ experienceId }),
         },
       );
-      const payload = await response.json();
+      const payload = (await response.json()) as {
+        error?: string;
+        checkoutSessionId?: string;
+        checkoutUrl?: string;
+        planId?: string;
+      };
       if (!response.ok) {
         if (response.status === 410) {
           onChange({
@@ -443,18 +449,32 @@ function MyBookings({
         }
         throw new Error(payload.error || "Could not start payment.");
       }
-      if (!payload.checkoutSessionId || !payload.returnUrl) {
+      if (!payload.checkoutSessionId || !payload.planId) {
         throw new Error("Whop did not return a secure checkout session.");
       }
-      setCheckoutSession({
-        sessionId: payload.checkoutSessionId,
-        returnUrl: payload.returnUrl,
+      if (payload.checkoutUrl) {
+        setFallbackCheckout({
+          bookingId: booking.id,
+          url: payload.checkoutUrl,
+        });
+      }
+      const result = await getIframeSdk().inAppPurchase({
+        planId: payload.planId,
+        id: payload.checkoutSessionId,
       });
-      setPayingId(null);
+      if (result.status !== "ok") {
+        throw new Error(result.error || "Checkout was not completed.");
+      }
+      setFallbackCheckout(null);
+      setPaymentNotice(
+        "Whop is confirming your payment. This booking will update automatically.",
+      );
+      onRefresh();
     } catch (value) {
       setError(
         value instanceof Error ? value.message : "Could not start payment.",
       );
+    } finally {
       setPayingId(null);
     }
   }
@@ -686,6 +706,17 @@ function MyBookings({
                         <ArrowRight size={15} />
                       </button>
                     </div>
+                    {fallbackCheckout?.bookingId === booking.id && (
+                      <a
+                        className="checkout-fallback-link"
+                        href={fallbackCheckout.url}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open secure checkout in a new tab
+                        <ExternalLink size={13} />
+                      </a>
+                    )}
                   </>
                 )}
                 {booking.status === "rejected" && (
@@ -833,67 +864,6 @@ function MyBookings({
             </div>
           </div>
         </div>
-      )}
-      {checkoutSession && (
-        <OverlayPortal>
-          <div className="modal-backdrop checkout-overlay-backdrop">
-            <section
-              className="checkout-overlay sc-card"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="checkout-overlay-title"
-            >
-              <header className="checkout-overlay-header">
-                <div>
-                  <p className="eyebrow">Secure checkout</p>
-                  <h2 id="checkout-overlay-title">Complete your payment</h2>
-                </div>
-                <button
-                  className="icon-button"
-                  aria-label="Close checkout"
-                  onClick={() => setCheckoutSession(null)}
-                >
-                  <X size={19} />
-                </button>
-              </header>
-              <div className="checkout-embed-shell">
-                <WhopCheckoutEmbed
-                  sessionId={checkoutSession.sessionId}
-                  returnUrl={checkoutSession.returnUrl}
-                  theme="dark"
-                  themeOptions={{ accentColor: "orange" }}
-                  styles={{ container: { paddingX: 0, paddingY: 0 } }}
-                  fallback={
-                    <div className="checkout-embed-loading" role="status">
-                      <RefreshCw size={19} className="spin" />
-                      Loading secure checkout…
-                    </div>
-                  }
-                  onPaymentError={() =>
-                    setError(
-                      "Payment could not be completed. Check your details and try again.",
-                    )
-                  }
-                  onComplete={() => {
-                    setCheckoutSession(null);
-                    setPaymentNotice(
-                      "Whop is confirming your payment. This booking will update automatically.",
-                    );
-                    onRefresh();
-                  }}
-                />
-                {error && (
-                  <p className="form-error checkout-embed-error">{error}</p>
-                )}
-              </div>
-              <footer className="checkout-overlay-footer">
-                <ShieldCheck size={16} aria-hidden />
-                Payment is securely processed by Whop. Your booking is only
-                confirmed after the signed payment event is received.
-              </footer>
-            </section>
-          </div>
-        </OverlayPortal>
       )}
     </section>
   );
