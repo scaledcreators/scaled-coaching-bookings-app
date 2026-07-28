@@ -3345,22 +3345,28 @@ select {
   margin-bottom: 34px;
 }
 .member-offers-empty svg {
+  width: 32px;
+  height: 32px;
   color: var(--sc-orange);
 }
 .member-offers-empty strong {
-  font-size: 17px;
+  font-size: 20px;
 }
 .member-offers-empty p {
   max-width: 510px;
   margin: 0;
   color: var(--text-2);
-  font-size: 11px;
+  font-size: 14px;
   line-height: 1.65;
 }
 .help-modal {
   width: min(520px, 100%);
 }
-.help-contact {
+.help-form {
+  display: grid;
+  gap: 16px;
+}
+.help-contact-intro {
   display: flex;
   align-items: flex-start;
   gap: 14px;
@@ -3369,25 +3375,22 @@ select {
   background: rgba(255, 255, 255, 0.025);
   padding: 17px;
 }
-.help-contact > svg {
+.help-contact-intro > svg {
   flex: 0 0 auto;
   color: var(--sc-orange);
 }
-.help-contact strong {
-  font-size: 13px;
-}
-.help-contact p {
-  margin: 7px 0 16px;
+.help-contact-intro p {
+  margin: 0;
   color: var(--text-2);
-  font-size: 11px;
+  font-size: 12px;
   line-height: 1.65;
 }
-.help-contact .sc-btn-primary {
-  max-width: 100%;
-  overflow-wrap: anywhere;
-  text-align: center;
-  text-transform: none;
-  letter-spacing: 0;
+.help-form .field > span {
+  font-size: 11px;
+  font-weight: 700;
+}
+.help-actions button {
+  min-width: 130px;
 }
 .show-more-times {
   width: 100%;
@@ -3418,8 +3421,8 @@ select {
     top: 10px;
     right: 10px;
   }
-  .help-contact {
-    display: grid;
+  .help-contact-intro {
+    gap: 11px;
   }
   .member-offers-empty {
     min-height: 220px;
@@ -3954,13 +3957,36 @@ select {
   to { transform: rotate(360deg); }
 }
 .live-refresh-error {
-  margin: 10px 0 0;
+  position: fixed;
+  z-index: 140;
+  right: 18px;
+  bottom: 18px;
+  max-width: min(360px, calc(100vw - 36px));
+  margin: 0;
   border: 1px solid rgba(246, 173, 85, 0.2);
   border-radius: 9px;
   background: rgba(246, 173, 85, 0.05);
   padding: 8px 11px;
   color: var(--warning);
   font-size: 10px;
+}
+.support-success-toast {
+  position: fixed;
+  z-index: 140;
+  right: 18px;
+  bottom: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  border: 1px solid rgba(57, 212, 154, 0.25);
+  border-radius: 10px;
+  background: #171b19;
+  padding: 11px 13px;
+  color: var(--success);
+  font-size: 11px;
+  font-weight: 750;
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.32);
 }
 
 .confirmation-strip {

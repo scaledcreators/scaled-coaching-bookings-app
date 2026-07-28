@@ -18,7 +18,6 @@ import {
   BookingCalendar,
   type BookingCalendarDay,
 } from "@/components/booking-calendar";
-import { DEFAULT_SUPPORT_CONTACT } from "@/lib/constants";
 import { AppBrand } from "@/components/app-brand";
 import { OverlayPortal } from "@/components/overlay-portal";
 import {
@@ -121,6 +120,7 @@ function MemberExperienceContent({
   );
   const [selected, setSelected] = useState<Offer | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [supportSent, setSupportSent] = useState(false);
   const [liveData, setLiveData] = useState(data);
   const [bookings, setBookings] = useState(
     data.bookings.filter((booking) => booking.whop_user_id === userId),
@@ -147,8 +147,6 @@ function MemberExperienceContent({
       onData: applyLiveData,
       urgent,
     });
-  const supportContact =
-    liveData.settings.support_contact || DEFAULT_SUPPORT_CONTACT;
   return (
     <main className="theme-root member-shell">
       <nav className="member-nav">
@@ -171,7 +169,7 @@ function MemberExperienceContent({
           <RefreshButton
             refreshing={refreshing}
             lastUpdated={lastUpdated}
-            onRefresh={() => void refresh()}
+            onRefresh={() => void refresh(true)}
           />
           <button className="support-button" onClick={() => setHelpOpen(true)}>
             <MessageCircle size={17} /> Help
@@ -179,6 +177,11 @@ function MemberExperienceContent({
         </div>
       </nav>
       {refreshError && <p className="live-refresh-error">{refreshError}</p>}
+      {supportSent && (
+        <p className="support-success-toast" role="status">
+          <Check size={16} /> Message sent through Whop
+        </p>
+      )}
       {checkoutComplete && (
         <div className="checkout-banner">
           <Check size={18} />
@@ -226,8 +229,13 @@ function MemberExperienceContent({
       )}{" "}
       {helpOpen && (
         <HelpDialog
-          supportContact={supportContact}
+          experienceId={experienceId}
           onClose={() => setHelpOpen(false)}
+          onSent={() => {
+            setHelpOpen(false);
+            setSupportSent(true);
+            window.setTimeout(() => setSupportSent(false), 3_500);
+          }}
         />
       )}
     </main>
@@ -253,8 +261,8 @@ function Offers({
             <span className="gradient-text">the right one.</span>
           </h1>
           <p>
-            Choose the support you need. Every request is personally reviewed so
-            your session starts with the right coach and context.
+            Choose a session and share what you’d like to work through. Your
+            coach reviews every request personally.
           </p>
         </div>
       </section>
@@ -326,12 +334,45 @@ function Offers({
 }
 
 function HelpDialog({
-  supportContact,
+  experienceId,
   onClose,
+  onSent,
 }: {
-  supportContact: string;
+  experienceId: string;
   onClose: () => void;
+  onSent: () => void;
 }) {
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setSending(true);
+    setError("");
+    try {
+      const response = await fetch("/api/support", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ experienceId, subject, message }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error || "Could not send your message.");
+      }
+      onSent();
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Could not send your message.",
+      );
+    } finally {
+      setSending(false);
+    }
+  }
+
   return (
     <div
       className="modal-backdrop"
@@ -359,19 +400,52 @@ function HelpDialog({
             <X size={18} />
           </button>
         </div>
-        <div className="help-contact">
-          <MessageCircle size={21} />
-          <div>
-            <strong>Contact the coaching team</strong>
+        <form className="help-form" onSubmit={submit}>
+          <div className="help-contact-intro">
+            <MessageCircle size={21} />
             <p>
-              Questions about a session, booking, meeting details, or refund?
-              Send us an email and include any useful context.
+              Send a message directly to the coaching team through Whop. Add
+              any session or booking details that will help us respond.
             </p>
-            <a className="sc-btn-primary" href={`mailto:${supportContact}`}>
-              Email {supportContact}
-            </a>
           </div>
-        </div>
+          <label className="field">
+            <span>Subject</span>
+            <input
+              value={subject}
+              onChange={(event) => setSubject(event.target.value)}
+              maxLength={160}
+              placeholder="What do you need help with?"
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Message</span>
+            <textarea
+              value={message}
+              onChange={(event) => setMessage(event.target.value)}
+              maxLength={5_000}
+              placeholder="Tell the coaching team what’s going on."
+              required
+            />
+          </label>
+          {error && <p className="form-error">{error}</p>}
+          <div className="modal-actions help-actions">
+            <button
+              type="button"
+              className="sc-btn-secondary"
+              onClick={onClose}
+              disabled={sending}
+            >
+              Cancel
+            </button>
+            <button
+              className="sc-btn-primary"
+              disabled={sending || !subject.trim() || !message.trim()}
+            >
+              {sending ? "Sending…" : "Send message"}
+            </button>
+          </div>
+        </form>
       </section>
     </div>
   );

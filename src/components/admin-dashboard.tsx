@@ -488,7 +488,7 @@ function AdminDashboardContent({
             <RefreshButton
               refreshing={refreshing}
               lastUpdated={lastUpdated}
-              onRefresh={() => void refresh()}
+              onRefresh={() => void refresh(true)}
             />
             {initialData.demo && (
               <span className="status-badge draft">Preview data</span>

@@ -22,10 +22,14 @@ export function useLiveRefresh<T>({
     onDataRef.current = onData;
   }, [onData]);
 
-  const refresh = useCallback(async () => {
-    if (requestRef.current) return requestRef.current;
+  const refresh = useCallback(async (showFeedback = false) => {
+    if (showFeedback) setRefreshing(true);
+    if (requestRef.current) {
+      await requestRef.current;
+      if (showFeedback) setRefreshing(false);
+      return;
+    }
     const work = (async () => {
-      setRefreshing(true);
       try {
         const response = await fetch(url, { cache: "no-store" });
         const payload = await response.json();
@@ -38,16 +42,19 @@ export function useLiveRefresh<T>({
       } catch {
         setRefreshError("Live update paused. We’ll try again shortly.");
       } finally {
-        setRefreshing(false);
         requestRef.current = null;
       }
     })();
     requestRef.current = work;
-    return work;
+    await work;
+    if (showFeedback) setRefreshing(false);
   }, [url]);
 
   useEffect(() => {
-    const interval = window.setInterval(refresh, urgent ? 4_000 : 15_000);
+    const interval = window.setInterval(
+      () => void refresh(),
+      urgent ? 4_000 : 15_000,
+    );
     const onFocus = () => void refresh();
     const onVisibility = () => {
       if (document.visibilityState === "visible") void refresh();
@@ -83,7 +90,7 @@ export function RefreshButton({
       title={lastUpdated ? `Last updated ${lastUpdated.toLocaleTimeString()}` : "Refresh information"}
     >
       <RefreshCw className={refreshing ? "spinning" : ""} size={16} />
-      <span>{refreshing ? "Refreshing" : lastUpdated ? "Updated just now" : "Refresh"}</span>
+      <span>Refresh</span>
     </button>
   );
 }

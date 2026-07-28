@@ -5,7 +5,6 @@ import {
   Check,
   Globe2,
   ImageIcon,
-  LifeBuoy,
   Palette,
   RotateCcw,
   Upload,
@@ -13,7 +12,6 @@ import {
 } from "lucide-react";
 import { CustomSelect } from "@/components/custom-select";
 import { useTenantTheme } from "@/components/tenant-theme-provider";
-import { DEFAULT_SUPPORT_CONTACT } from "@/lib/constants";
 import { DEFAULT_APPEARANCE, THEME_PRESETS } from "@/lib/theme";
 import type { BookingSettings } from "@/lib/types";
 
@@ -48,7 +46,6 @@ export function SettingsManager({
   const { settings, updatePreview, replaceSettings } = useTenantTheme();
   const [form, setForm] = useState({
     defaultTimezone: initialSettings.default_timezone,
-    supportContact: initialSettings.support_contact || DEFAULT_SUPPORT_CONTACT,
   });
   const [advanced, setAdvanced] = useState(settings.theme_name === "custom");
   const [saving, setSaving] = useState(false);
@@ -139,7 +136,6 @@ export function SettingsManager({
           body: JSON.stringify({
             companyId,
             defaultTimezone: form.defaultTimezone,
-            supportContact: form.supportContact,
             displayName: settings.display_name,
             logoUrl: settings.logo_url,
             themeName: settings.theme_name,
@@ -384,36 +380,6 @@ export function SettingsManager({
               />
               <small className="field-help">
                 This timezone is shared by the coach calendar and customers.
-              </small>
-            </div>
-          </div>
-        </section>
-        <section className="panel settings-card">
-          <div className="settings-card-icon">
-            <LifeBuoy size={20} />
-          </div>
-          <div className="settings-card-body">
-            <div className="settings-card-heading">
-              <h3>Customer support</h3>
-              <p>
-                Give customers a direct way to contact you from the coaching
-                experience.
-              </p>
-            </div>
-            <div className="field">
-              <label>Support email</label>
-              <input
-                type="email"
-                value={form.supportContact}
-                onChange={(event) => {
-                  markChanged();
-                  setForm({ ...form, supportContact: event.target.value });
-                }}
-                placeholder="support@example.com"
-                required
-              />
-              <small className="field-help">
-                This address appears in the customer Help panel.
               </small>
             </div>
           </div>

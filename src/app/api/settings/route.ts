@@ -8,7 +8,7 @@ const color = z.string().regex(/^#[0-9a-fA-F]{6}$/);
 const schema = z.object({
   companyId: z.string().startsWith("biz_"),
   defaultTimezone: z.string().min(1).max(100),
-  supportContact: z.union([z.string().email(), z.literal("")]),
+  supportContact: z.union([z.string().email(), z.literal("")]).optional(),
   displayName: z.string().trim().min(1).max(60),
   logoUrl: z.union([
     z.string().url().startsWith("https://"),
@@ -38,14 +38,18 @@ export async function POST(request: Request) {
       }),
     );
 
+    const settingsUpdate: Record<string, string | null> = {
+      whop_company_id: input.companyId,
+      default_timezone: input.defaultTimezone,
+      updated_at: new Date().toISOString(),
+    };
+    if (input.supportContact !== undefined) {
+      settingsUpdate.support_contact = input.supportContact || null;
+    }
+
     const { data, error } = await getSupabaseAdmin()
       .from("booking_settings")
-      .upsert({
-        whop_company_id: input.companyId,
-        default_timezone: input.defaultTimezone,
-        support_contact: input.supportContact || null,
-        updated_at: new Date().toISOString(),
-      })
+      .upsert(settingsUpdate)
       .select(
         "emergency_paused,default_timezone,default_daily_capacity,support_contact",
       )
