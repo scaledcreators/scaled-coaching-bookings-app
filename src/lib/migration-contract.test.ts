@@ -16,6 +16,13 @@ const customizationMigration = readFileSync(
   ),
   "utf8",
 );
+const notificationMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/202608140001_whop_notification_delivery.sql",
+  ),
+  "utf8",
+);
 
 describe("atomic capacity migration contract", () => {
   it("serializes direct creates and reschedules before counting capacity", () => {
@@ -45,5 +52,17 @@ describe("customization migration contract", () => {
     expect(customizationMigration).toContain("add column if not exists member_bookings_label");
     expect(customizationMigration).toContain("add column if not exists delivery_mode");
     expect(customizationMigration).not.toMatch(/drop\s+table|delete\s+from/i);
+  });
+});
+
+describe("notification migration contract", () => {
+  it("deduplicates each event and channel and preserves booking records", () => {
+    expect(notificationMigration).toContain(
+      "unique (booking_request_id, event_key, channel)",
+    );
+    expect(notificationMigration).toContain(
+      "claim_booking_notification_delivery",
+    );
+    expect(notificationMigration).not.toMatch(/delete\s+from\s+booking_requests/i);
   });
 });

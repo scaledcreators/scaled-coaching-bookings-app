@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { requireRequestViewer } from "@/lib/auth";
 import { adminTransitionError } from "@/lib/booking-lifecycle";
-import { notifyCustomer } from "@/lib/booking-notifications";
+import { notifyBookingCustomer } from "@/lib/booking-notifications";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { whop } from "@/lib/whop";
 
@@ -76,20 +76,19 @@ export async function POST(
       sender: "system",
       body: `The coach marked this booking ${nextStatus.replace("_", " ")}.`,
     });
-    await notifyCustomer({
+    await notifyBookingCustomer({
+      bookingId: id,
+      companyId: input.companyId,
       experienceId: booking.whop_experience_id,
       userId: booking.whop_user_id,
-      title:
+      eventKey: `booking_${nextStatus}`,
+      kind:
         input.action === "cancel"
-          ? "Your coaching booking was cancelled"
+          ? "booking_cancelled"
           : input.action === "no_show"
-            ? "Your coaching booking was marked as a no-show"
-            : "Your coaching session is complete",
-      subtitle: booking.booking_offers?.title,
-      content:
-        input.action === "cancel"
-          ? "The reserved time has been released. No new payment was taken."
-          : "Open Coaching Bookings to review your updated session history.",
+            ? "booking_no_show"
+            : "booking_completed",
+      context: { offerTitle: booking.booking_offers?.title },
     });
 
     return Response.json({ booking: data });

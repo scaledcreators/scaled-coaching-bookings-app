@@ -1,5 +1,5 @@
 import { waitUntil } from "@vercel/functions";
-import { notifyCustomer } from "@/lib/booking-notifications";
+import { notifyBookingCustomer } from "@/lib/booking-notifications";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { whop } from "@/lib/whop";
 
@@ -100,14 +100,16 @@ async function processEvent(eventId: string, event: WhopEvent) {
           ? "A duplicate payment was detected and automatically refunded."
           : `A duplicate payment (${paymentId}) requires manual refund review.`,
       });
-      await notifyCustomer({
+      await notifyBookingCustomer({
+        bookingId,
+        companyId: booking.whop_company_id,
         experienceId: booking.whop_experience_id,
         userId: booking.whop_user_id,
-        title: "Duplicate payment detected",
-        subtitle: booking.booking_offers?.title,
-        content: refunded
-          ? "The extra charge is being returned automatically. Your booking remains confirmed."
-          : "Your booking remains confirmed. The coaching team has been alerted to return the extra charge.",
+        eventKey: `duplicate_payment:${paymentId}:${refunded ? "refunded" : "review"}`,
+        kind: refunded
+          ? "duplicate_payment_refunded"
+          : "duplicate_payment_review",
+        context: { offerTitle: booking.booking_offers?.title },
       });
     };
 
@@ -159,15 +161,17 @@ async function processEvent(eventId: string, event: WhopEvent) {
               ? "Payment arrived after the deadline and was automatically refunded."
               : "Payment arrived after the deadline and requires manual refund review.",
         });
-        await notifyCustomer({
+        await notifyBookingCustomer({
+          bookingId,
+          companyId: booking.whop_company_id,
           experienceId: booking.whop_experience_id,
           userId: booking.whop_user_id,
-          title: "Payment arrived after the deadline",
-          subtitle: booking.booking_offers?.title,
-          content:
+          eventKey: `late_payment:${paymentId}:${refundStatus}`,
+          kind:
             refundStatus === "processing"
-              ? "The time had already expired, so your payment is being returned automatically."
-              : "The time had already expired. The coaching team has been alerted to return your payment.",
+              ? "late_payment_refunded"
+              : "late_payment_review",
+          context: { offerTitle: booking.booking_offers?.title },
         });
       } else {
         const { data: confirmed } = await supabase
@@ -203,13 +207,18 @@ async function processEvent(eventId: string, event: WhopEvent) {
             sender: "system",
             body: "Whop payment succeeded. The booking is confirmed.",
           });
-          await notifyCustomer({
+          await notifyBookingCustomer({
+            bookingId,
+            companyId: booking.whop_company_id,
             experienceId: booking.whop_experience_id,
             userId: booking.whop_user_id,
-            title: "Your coaching session is confirmed",
-            subtitle: booking.booking_offers?.title,
-            content:
-              "Payment was received. Open Coaching Bookings for your session and private meeting details.",
+            eventKey: "payment_confirmed",
+            kind: "payment_confirmed",
+            context: {
+              offerTitle: booking.booking_offers?.title,
+              startsAt: booking.requested_start_at,
+              timezone: booking.timezone,
+            },
           });
         } else if (paymentId) {
           const { data: latest } = await supabase
@@ -235,12 +244,32 @@ async function processEvent(eventId: string, event: WhopEvent) {
       sender: "system",
       body: "A Whop payment attempt failed. The payment window remains open until its deadline.",
     });
+    const { data: failedBooking } = await supabase
+      .from("booking_requests")
+      .select("*, booking_offers(title)")
+      .eq("id", bookingId)
+      .maybeSingle();
+    if (failedBooking) {
+      await notifyBookingCustomer({
+        bookingId,
+        companyId: failedBooking.whop_company_id,
+        experienceId: failedBooking.whop_experience_id,
+        userId: failedBooking.whop_user_id,
+        eventKey: `payment_failed:${eventId}`,
+        kind: "payment_failed",
+        context: {
+          offerTitle: failedBooking.booking_offers?.title,
+          paymentDueAt: failedBooking.payment_due_at,
+          timezone: failedBooking.timezone,
+        },
+      });
+    }
   }
 
   if (event.type.startsWith("refund.") && bookingId) {
     const { data: refundBooking } = await supabase
       .from("booking_requests")
-      .select("status")
+      .select("*, booking_offers(title)")
       .eq("id", bookingId)
       .maybeSingle();
     const refundStatus = /succeed|complete|refunded/.test(
@@ -265,6 +294,22 @@ async function processEvent(eventId: string, event: WhopEvent) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", bookingId);
+    if (refundBooking) {
+      await notifyBookingCustomer({
+        bookingId,
+        companyId: refundBooking.whop_company_id,
+        experienceId: refundBooking.whop_experience_id,
+        userId: refundBooking.whop_user_id,
+        eventKey: `refund:${event.data.id ?? eventId}:${refundStatus}`,
+        kind:
+          refundStatus === "refunded"
+            ? "refund_refunded"
+            : refundStatus === "failed"
+              ? "refund_failed"
+              : "refund_processing",
+        context: { offerTitle: refundBooking.booking_offers?.title },
+      });
+    }
   }
   if (event.type === "dispute.created" && bookingId) {
     await supabase

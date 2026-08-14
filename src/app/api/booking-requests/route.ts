@@ -184,6 +184,7 @@ export async function POST(request: Request) {
         : "Free booking request submitted for coach approval.",
     });
     await notifyCoachOfRequest({
+      bookingId: booking.id,
       companyId: input.companyId,
       offerTitle: offer.title,
       requestedStart: startsAt.toISOString(),

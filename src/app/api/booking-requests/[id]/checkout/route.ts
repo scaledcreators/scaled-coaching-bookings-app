@@ -4,7 +4,7 @@ import {
   checkoutErrorMessage,
   createBookingCheckout,
 } from "@/lib/booking-checkout";
-import { notifyCustomer } from "@/lib/booking-notifications";
+import { notifyBookingCustomer } from "@/lib/booking-notifications";
 import { companyIdForExperience } from "@/lib/data";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { whop } from "@/lib/whop";
@@ -98,13 +98,14 @@ export async function POST(
           .delete(booking.whop_checkout_configuration_id)
           .catch(() => undefined);
       }
-      await notifyCustomer({
+      await notifyBookingCustomer({
+        bookingId: booking.id,
+        companyId: booking.whop_company_id,
         experienceId: booking.whop_experience_id,
         userId: booking.whop_user_id,
-        title: "Payment window expired",
-        subtitle: booking.booking_offers.title,
-        content:
-          "The reserved time was released. Submit a new request if you’d still like to book.",
+        eventKey: "payment_expired",
+        kind: "payment_expired",
+        context: { offerTitle: booking.booking_offers.title },
       });
       return Response.json(
         {

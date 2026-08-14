@@ -4,6 +4,7 @@ import { getApplicableAvailabilityRules } from "@/lib/availability-server";
 import { slotFitsAvailability } from "@/lib/availability-time";
 import { getSingleActiveCoach } from "@/lib/single-coach";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { notifyBookingCustomer } from "@/lib/booking-notifications";
 
 const schema = z
   .object({
@@ -162,6 +163,68 @@ export async function PATCH(
       sender: "system",
       body: `Booking ${changes}.`,
     });
+    const normalized = (value: unknown) =>
+      typeof value === "string" ? value.trim() : "";
+    const meetingDetailsChanged =
+      (input.meetingLocation !== undefined &&
+        normalized(input.meetingLocation) !== normalized(existing.meeting_location)) ||
+      (input.meetingUrl !== undefined &&
+        normalized(input.meetingUrl) !== normalized(existing.meeting_url)) ||
+      (input.joinInstructions !== undefined &&
+        normalized(input.joinInstructions) !==
+          normalized(existing.manual_join_instructions));
+    const notifications: Array<Promise<unknown>> = [];
+    if (
+      meetingDetailsChanged &&
+      ["confirmed", "completed", "no_show"].includes(data.status)
+    ) {
+      notifications.push(
+        notifyBookingCustomer({
+          bookingId: id,
+          companyId: input.companyId,
+          experienceId: data.whop_experience_id,
+          userId: data.whop_user_id,
+          eventKey: `meeting_details_updated:${data.updated_at}`,
+          kind: "meeting_details_updated",
+          context: {
+            offerTitle: data.booking_offers?.title,
+            startsAt: data.confirmed_start_at ?? data.requested_start_at,
+            timezone: data.timezone,
+          },
+        }),
+      );
+    }
+    if (input.requestedStartAt !== undefined) {
+      notifications.push(
+        notifyBookingCustomer({
+          bookingId: id,
+          companyId: input.companyId,
+          experienceId: data.whop_experience_id,
+          userId: data.whop_user_id,
+          eventKey: `reschedule_proposed:${data.updated_at}`,
+          kind: "reschedule_proposed",
+          context: {
+            offerTitle: data.booking_offers?.title,
+            startsAt: data.requested_start_at,
+            timezone: data.timezone,
+          },
+        }),
+      );
+    }
+    if (input.refundStatus === "declined") {
+      notifications.push(
+        notifyBookingCustomer({
+          bookingId: id,
+          companyId: input.companyId,
+          experienceId: data.whop_experience_id,
+          userId: data.whop_user_id,
+          eventKey: `refund_declined:${data.updated_at}`,
+          kind: "refund_declined",
+          context: { offerTitle: data.booking_offers?.title },
+        }),
+      );
+    }
+    await Promise.all(notifications);
     return Response.json({ booking: data });
   } catch (error) {
     return Response.json(

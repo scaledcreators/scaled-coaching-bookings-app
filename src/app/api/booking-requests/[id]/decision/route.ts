@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { requireRequestViewer } from "@/lib/auth";
-import { notifyCustomer } from "@/lib/booking-notifications";
+import { notifyBookingCustomer } from "@/lib/booking-notifications";
 import { getSingleActiveCoach } from "@/lib/single-coach";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { whop } from "@/lib/whop";
@@ -96,18 +96,20 @@ export async function POST(
             ? "The legacy prepaid request was rejected and its Whop payment is being refunded."
           : "The booking request was rejected. No payment was collected.",
       });
-      await notifyCustomer({
+      await notifyBookingCustomer({
+        bookingId: id,
+        companyId: input.companyId,
         experienceId: booking.whop_experience_id,
         userId: booking.whop_user_id,
-        title: isPaidReschedule
-          ? "Time change not approved"
-          : "Coaching request update",
-        subtitle: booking.booking_offers.title,
-        content: isPaidReschedule
-          ? "Your original confirmed session is unchanged. Open Coaching Bookings for details."
+        eventKey: isPaidReschedule
+          ? "reschedule_rejected"
+          : "request_rejected",
+        kind: isPaidReschedule
+          ? "reschedule_rejected"
           : legacyPaidRequest
-            ? "This request was paid under the previous flow. It wasn’t approved, and the payment is being returned through Whop."
-          : "Your coach couldn’t approve this request. No payment was taken.",
+            ? "legacy_request_rejected"
+            : "request_rejected",
+        context: { offerTitle: booking.booking_offers.title },
       });
 
       return Response.json({ booking: data });
@@ -180,16 +182,19 @@ export async function POST(
         ? `Request approved. Payment is due by ${data.payment_due_at}.`
         : "Request approved and booking confirmed.",
     });
-    await notifyCustomer({
+    await notifyBookingCustomer({
+      bookingId: id,
+      companyId: input.companyId,
       experienceId: booking.whop_experience_id,
       userId: booking.whop_user_id,
-      title: requiresPayment
-        ? "Your coaching request was approved"
-        : "Your coaching session is confirmed",
-      subtitle: offer.title,
-      content: requiresPayment
-        ? `Complete payment by ${new Date(data.payment_due_at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })} to confirm your time.`
-        : "Open Coaching Bookings to view your confirmed session.",
+      eventKey: requiresPayment ? "request_approved_payment" : "request_confirmed",
+      kind: requiresPayment ? "request_approved_payment" : "request_confirmed",
+      context: {
+        offerTitle: offer.title,
+        paymentDueAt: data.payment_due_at,
+        timezone: data.timezone,
+        startsAt: data.confirmed_start_at ?? data.requested_start_at,
+      },
     });
 
     return Response.json({ booking: data });

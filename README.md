@@ -19,6 +19,7 @@ A Whop-native, manual-first coaching bookings app. Creators manage offers, avail
 - Transaction-scoped slot lock to prevent two concurrent requests from claiming the same slot
 - Request-first approval flow with an up-to-24-hour Whop payment window for approved paid offers
 - Signed, idempotent Whop webhook handling for payments, invoices, memberships, refunds, disputes, and failures
+- Tenant-aware, deduplicated Whop notifications for booking, payment, refund, and private-detail updates
 - Supabase schema, indexes, RLS, booking RPCs, and starter seed
 - Responsive, keyboard-accessible interaction and light/dark Whop appearance support
 
@@ -27,7 +28,7 @@ A Whop-native, manual-first coaching bookings app. Creators manage offers, avail
 1. Create a Supabase project.
 2. Run `supabase/migrations/202607210001_initial_schema.sql` in the SQL editor (or use the Supabase CLI migration flow).
    If the initial schema was installed before the service-role grant fix, also run `supabase/migrations/202607210002_service_role_privileges.sql`.
-   Then run the later migrations in filename order, including `202607220002_request_then_pay_on_approval.sql`, `202607220003_single_coach_daily_capacity.sql`, and `202607230001_capacity_and_booking_archive.sql`. These migrations enable Supabase Cron for overdue payment windows, make create/reschedule capacity checks atomic, and add soft-archive fields for booking history.
+   Then run every later migration in filename order, including `202608130001_custom_labels_delivery_and_intake.sql` and `202608140001_whop_notification_delivery.sql`. These migrations enable capacity protection, custom intake and terminology, and deduplicated notification delivery records.
 3. Copy `.env.example` to `.env.local` and add the project URL, anon key, and service-role key.
 4. No Whop experience or company IDs need to be seeded. On first authenticated experience access, the server retrieves the experience from Whop, verifies that it belongs to this app, and caches its company relationship in `experience_installations`.
 
@@ -45,6 +46,12 @@ The browser never receives the service-role key. All app data is accessed throug
 6. Grant the app the corresponding checkout, payment, membership, company/app-context, and webhook permissions in the Whop dashboard. Add `notification:create` so the app can alert the company team and individual customers about booking decisions.
 
 All new bookings enter `pending_approval` without charging the member. Coach approval confirms free bookings immediately and moves paid bookings to `pending_payment` for up to 24 hours (ending at least one hour before the session). The member creates the Whop checkout only when they choose **Complete payment**. Successful payment confirms the booking; an overdue payment window expires and releases the slot. Checkout metadata includes `offer_id`, `booking_request_id`, `whop_company_id`, and `whop_user_id`, allowing the webhook to activate the correct local request.
+
+## Notifications
+
+Whop is the app's only notification channel. Event-driven notifications cover request decisions, booking lifecycle changes, payment failures and confirmations, refund changes, and changes to private location or joining details. Delivery attempts are deduplicated so webhook retries do not send the same update more than once. Private addresses and meeting links remain inside the authenticated Whop experience.
+
+Scheduled appointment reminders are intentionally not included because they require a recurring scheduler. No external email or SMS provider is required.
 
 ## Local development
 
