@@ -186,6 +186,7 @@ export async function POST(request: Request) {
     await notifyCoachOfRequest({
       bookingId: booking.id,
       companyId: input.companyId,
+      experienceId: input.experienceId,
       offerTitle: offer.title,
       requestedStart: startsAt.toISOString(),
     });

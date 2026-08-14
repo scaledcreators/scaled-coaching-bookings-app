@@ -4,6 +4,7 @@ import {
   type NotificationContext,
   type NotificationCopy,
 } from "@/lib/notification-copy";
+import { coachNotificationTarget } from "@/lib/notification-target";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import type { BookingSettings } from "@/lib/types";
 import { whop, whopConfigured } from "@/lib/whop";
@@ -95,6 +96,7 @@ async function deliverTracked(
     deliveryId = await claimDelivery(input);
     if (!deliveryId) return false;
     const sent = await send();
+    if (!sent) throw new Error("Whop did not queue the notification.");
     await finishDelivery(deliveryId, sent ? "sent" : "skipped");
     return sent;
   } catch (error) {
@@ -107,11 +109,13 @@ async function deliverTracked(
 export async function notifyCoachOfRequest({
   bookingId,
   companyId,
+  experienceId,
   offerTitle,
   requestedStart,
 }: {
   bookingId: string;
   companyId: string;
+  experienceId: string;
   offerTitle: string;
   requestedStart: string;
 }) {
@@ -124,9 +128,12 @@ export async function notifyCoachOfRequest({
   return deliverTracked(
     { bookingId, companyId, eventKey: "new_request:coach", copy },
     async () => {
-      if (!whopConfigured) return false;
+      if (!whopConfigured) {
+        throw new Error("Whop notifications are not configured.");
+      }
+      const company = await whop.companies.retrieve(companyId);
       const result = await whop.notifications.create({
-        company_id: companyId,
+        ...coachNotificationTarget(experienceId, company.owner_user.id),
         ...copy,
       });
       return result.success;
@@ -154,7 +161,12 @@ export async function notifyBookingCustomer({
   const settings = await readDeliverySettings(companyId);
   const copy = buildBookingNotificationCopy(kind, settings, context);
   return deliverTracked({ bookingId, companyId, eventKey, copy }, async () => {
-    if (!experienceId || !whopConfigured) return false;
+    if (!experienceId) {
+      throw new Error("The booking does not have a Whop experience ID.");
+    }
+    if (!whopConfigured) {
+      throw new Error("Whop notifications are not configured.");
+    }
     const result = await whop.notifications.create({
       experience_id: experienceId,
       user_ids: [userId],
