@@ -1,3 +1,29 @@
+export type DeliveryMode = "in_person" | "video" | "phone" | "decided_later";
+
+export type IntakeFieldType =
+  | "short_text"
+  | "long_text"
+  | "single_choice"
+  | "multi_choice"
+  | "yes_no"
+  | "date";
+
+export type IntakeField = {
+  id: string;
+  type: IntakeFieldType;
+  label: string;
+  required: boolean;
+  placeholder?: string;
+  options?: string[];
+};
+
+export type IntakeSchema = {
+  version: 1;
+  title: string;
+  description: string;
+  fields: IntakeField[];
+};
+
 export type Offer = {
   id: string;
   whop_company_id: string;
@@ -18,6 +44,8 @@ export type Offer = {
   buffer_before_minutes: number;
   buffer_after_minutes: number;
   capacity_per_slot: number;
+  delivery_mode: DeliveryMode;
+  intake_schema: IntakeSchema | Record<string, never>;
   coach_ids?: string[];
 };
 
@@ -73,7 +101,11 @@ export type Booking = {
   created_at: string;
   booking_offers?: Pick<
     Offer,
-    "title" | "duration_minutes" | "price_cents" | "access_mode"
+    | "title"
+    | "duration_minutes"
+    | "price_cents"
+    | "access_mode"
+    | "delivery_mode"
   > | null;
   member_profile?: { name: string | null; username: string | null } | null;
 };
@@ -148,6 +180,10 @@ export type BookingSettings = BookingAppearance & {
   default_timezone: string;
   default_daily_capacity: number;
   support_contact: string | null;
+  service_label_singular: string;
+  service_label_plural: string;
+  admin_bookings_label: string;
+  member_bookings_label: string;
 };
 
 export type DashboardData = {

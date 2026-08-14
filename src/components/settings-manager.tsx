@@ -7,6 +7,7 @@ import {
   ImageIcon,
   Palette,
   RotateCcw,
+  Type,
   Upload,
   X,
 } from "lucide-react";
@@ -46,6 +47,10 @@ export function SettingsManager({
   const { settings, updatePreview, replaceSettings } = useTenantTheme();
   const [form, setForm] = useState({
     defaultTimezone: initialSettings.default_timezone,
+    serviceLabelSingular: initialSettings.service_label_singular,
+    serviceLabelPlural: initialSettings.service_label_plural,
+    adminBookingsLabel: initialSettings.admin_bookings_label,
+    memberBookingsLabel: initialSettings.member_bookings_label,
   });
   const [advanced, setAdvanced] = useState(settings.theme_name === "custom");
   const [saving, setSaving] = useState(false);
@@ -142,6 +147,10 @@ export function SettingsManager({
             themePrimary: settings.theme_primary,
             themeAccent: settings.theme_accent,
             themeHighlight: settings.theme_highlight,
+            serviceLabelSingular: form.serviceLabelSingular,
+            serviceLabelPlural: form.serviceLabelPlural,
+            adminBookingsLabel: form.adminBookingsLabel,
+            memberBookingsLabel: form.memberBookingsLabel,
           }),
         });
         const payload = await response.json();
@@ -167,7 +176,7 @@ export function SettingsManager({
           <p className="eyebrow">Workspace</p>
           <h2>Settings</h2>
           <p>
-            Make the coaching experience feel like your brand. Changes are
+            Make the booking experience feel like your brand. Changes are
             scoped only to this Whop company.
           </p>
         </div>
@@ -259,6 +268,90 @@ export function SettingsManager({
                 </small>
               </div>
             </div>
+          </div>
+      </section>
+
+        <section className="panel settings-card terminology-settings-card">
+          <div className="settings-card-icon">
+            <Type size={20} />
+          </div>
+          <div className="settings-card-body">
+            <div className="settings-card-heading">
+              <h3>Terminology</h3>
+              <p>
+                Adapt the app for appointments, consultations, visits, or the
+                language your customers already know.
+              </p>
+            </div>
+            <div className="form-grid terminology-grid">
+              <div className="field">
+                <label>Service name</label>
+                <input
+                  value={form.serviceLabelSingular}
+                  maxLength={30}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    markChanged();
+                    setForm({ ...form, serviceLabelSingular: value });
+                    updatePreview({ service_label_singular: value || "Session" });
+                  }}
+                  placeholder="Session"
+                  required
+                />
+                <small className="field-help">Singular, such as Session or Visit.</small>
+              </div>
+              <div className="field">
+                <label>Services name</label>
+                <input
+                  value={form.serviceLabelPlural}
+                  maxLength={30}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    markChanged();
+                    setForm({ ...form, serviceLabelPlural: value });
+                    updatePreview({ service_label_plural: value || "Sessions" });
+                  }}
+                  placeholder="Sessions"
+                  required
+                />
+                <small className="field-help">Plural, such as Sessions or Visits.</small>
+              </div>
+              <div className="field">
+                <label>Admin bookings heading</label>
+                <input
+                  value={form.adminBookingsLabel}
+                  maxLength={40}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    markChanged();
+                    setForm({ ...form, adminBookingsLabel: value });
+                    updatePreview({ admin_bookings_label: value || "Bookings" });
+                  }}
+                  placeholder="Bookings"
+                  required
+                />
+              </div>
+              <div className="field">
+                <label>Customer bookings heading</label>
+                <input
+                  value={form.memberBookingsLabel}
+                  maxLength={40}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    markChanged();
+                    setForm({ ...form, memberBookingsLabel: value });
+                    updatePreview({ member_bookings_label: value || "My bookings" });
+                  }}
+                  placeholder="My bookings"
+                  required
+                />
+              </div>
+            </div>
+            <p className="settings-preview-copy">
+              Preview: <strong>{form.serviceLabelPlural || "Sessions"}</strong>
+              <span>·</span>
+              <strong>{form.memberBookingsLabel || "My bookings"}</strong>
+            </p>
           </div>
         </section>
 

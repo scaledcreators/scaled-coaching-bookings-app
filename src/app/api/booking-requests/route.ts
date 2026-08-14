@@ -6,6 +6,7 @@ import { notifyCoachOfRequest } from "@/lib/booking-notifications";
 import { companyIdForExperience } from "@/lib/data";
 import { getSingleActiveCoach } from "@/lib/single-coach";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { buildStoredIntakeAnswers } from "@/lib/intake-forms";
 
 const schema = z.object({
   experienceId: z.string().startsWith("exp_"),
@@ -60,6 +61,10 @@ export async function POST(request: Request) {
 
     const coach = await getSingleActiveCoach(supabase, input.companyId);
     const bookingTimezone = settings?.default_timezone || coach.timezone;
+    const storedIntakeAnswers = buildStoredIntakeAnswers(
+      offer.intake_schema,
+      input.intakeAnswers,
+    );
 
     const startsAt = new Date(input.startsAt);
     const endsAt = new Date(
@@ -127,7 +132,7 @@ export async function POST(request: Request) {
         p_starts_at: startsAt.toISOString(),
         p_ends_at: endsAt.toISOString(),
         p_timezone: bookingTimezone,
-        p_intake_answers: input.intakeAnswers,
+        p_intake_answers: storedIntakeAnswers,
         p_member_note: input.memberNote,
       },
     );
@@ -162,7 +167,7 @@ export async function POST(request: Request) {
     const { data: booking, error: bookingError } = await supabase
       .from("booking_requests")
       .select(
-        "*, booking_offers(title,duration_minutes,price_cents,access_mode)",
+        "*, booking_offers(title,duration_minutes,price_cents,access_mode,delivery_mode)",
       )
       .eq("id", bookingId)
       .single();

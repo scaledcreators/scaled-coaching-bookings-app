@@ -51,7 +51,7 @@ export async function POST(
       .eq("id", id)
       .eq("whop_company_id", input.companyId)
       .select(
-        "*, booking_offers(title,duration_minutes,price_cents,access_mode)",
+        "*, booking_offers(title,duration_minutes,price_cents,access_mode,delivery_mode)",
       )
       .single();
     if (error) throw error;

@@ -1,12 +1,22 @@
 "use client";
 import { useState } from "react";
-import { Clock3, Pencil, Plus, Trash2, UserRound, X } from "lucide-react";
+import { Clock3, MapPin, Pencil, Plus, Trash2, X } from "lucide-react";
 import type { Offer } from "@/lib/types";
 import { CustomSelect } from "@/components/custom-select";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { OverlayPortal } from "@/components/overlay-portal";
+import { IntakeFormBuilder } from "@/components/intake-form-builder";
+import {
+  cloneIntakeSchema,
+  DEFAULT_INTAKE_SCHEMA,
+  normalizeIntakeSchema,
+} from "@/lib/intake-forms";
+import {
+  DELIVERY_MODE_OPTIONS,
+  deliveryModeLabel,
+} from "@/lib/delivery-mode";
 
-const emptyForm = {
+const createEmptyForm = () => ({
   title: "",
   description: "",
   durationMinutes: 45,
@@ -17,29 +27,35 @@ const emptyForm = {
   maxAdvanceDays: 60,
   bufferBeforeMinutes: 0,
   bufferAfterMinutes: 15,
-};
+  deliveryMode: "decided_later" as Offer["delivery_mode"],
+  intakeSchema: cloneIntakeSchema(DEFAULT_INTAKE_SCHEMA),
+});
 export function OfferManager({
   companyId,
   demo,
   initialOffers,
   onOffersChange,
+  serviceLabelSingular,
+  serviceLabelPlural,
 }: {
   companyId: string;
   demo: boolean;
   initialOffers: Offer[];
   onOffersChange?: (offers: Offer[]) => void;
+  serviceLabelSingular: string;
+  serviceLabelPlural: string;
 }) {
   const offers = initialOffers;
   const [editingId, setEditingId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
-  const [form, setForm] = useState(emptyForm);
+  const [form, setForm] = useState(createEmptyForm);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [pendingArchive, setPendingArchive] = useState<Offer | null>(null);
   const [archiving, setArchiving] = useState(false);
   function create() {
     setEditingId(null);
-    setForm(emptyForm);
+    setForm(createEmptyForm());
     setOpen(true);
   }
   function edit(offer: Offer) {
@@ -55,6 +71,8 @@ export function OfferManager({
       maxAdvanceDays: offer.max_advance_days,
       bufferBeforeMinutes: offer.buffer_before_minutes,
       bufferAfterMinutes: offer.buffer_after_minutes,
+      deliveryMode: offer.delivery_mode ?? "decided_later",
+      intakeSchema: normalizeIntakeSchema(offer.intake_schema),
     });
     setOpen(true);
   }
@@ -76,6 +94,8 @@ export function OfferManager({
         maxAdvanceDays: form.maxAdvanceDays,
         bufferBeforeMinutes: form.bufferBeforeMinutes,
         bufferAfterMinutes: form.bufferAfterMinutes,
+        deliveryMode: form.deliveryMode,
+        intakeSchema: form.intakeSchema,
       };
       let offer: Offer;
       if (demo)
@@ -97,6 +117,8 @@ export function OfferManager({
           buffer_before_minutes: form.bufferBeforeMinutes,
           buffer_after_minutes: form.bufferAfterMinutes,
           capacity_per_slot: 1,
+          delivery_mode: form.deliveryMode,
+          intake_schema: form.intakeSchema,
         };
       else {
         const response = await fetch(
@@ -156,19 +178,19 @@ export function OfferManager({
       <header className="section-page-heading split-heading">
         <div>
           <p className="eyebrow">Products & payments</p>
-          <h2>Coaching sessions</h2>
+          <h2>{serviceLabelPlural}</h2>
           <p>
-            Create the sessions customers can request, with pricing and booking
-            rules for your coaching calendar.
+            Create the {serviceLabelPlural.toLowerCase()} customers can request,
+            with pricing, delivery, and intake questions.
           </p>
         </div>
         <button className="sc-btn-primary" onClick={create}>
-          <Plus size={16} /> New session
+          <Plus size={16} /> New {serviceLabelSingular.toLowerCase()}
         </button>
       </header>
       <section className="panel offers-management">
         <div className="offers-list-heading">
-          <span>Session</span>
+          <span>{serviceLabelSingular}</span>
           <span>Delivery</span>
           <span>Price</span>
           <span>Status</span>
@@ -177,10 +199,12 @@ export function OfferManager({
         {offers.length === 0 && (
           <div className="offers-empty">
             <CircleDollarSignIcon />
-            <strong>No sessions yet</strong>
-            <p>Create your first free or paid coaching session.</p>
+            <strong>No {serviceLabelPlural.toLowerCase()} yet</strong>
+            <p>
+              Create your first free or paid {serviceLabelSingular.toLowerCase()}.
+            </p>
             <button className="sc-btn-primary" onClick={create}>
-              Create session
+              Create {serviceLabelSingular.toLowerCase()}
             </button>
           </div>
         )}
@@ -199,8 +223,8 @@ export function OfferManager({
                 {offer.duration_minutes} minutes
               </span>
               <span>
-                <UserRound size={14} />
-                Single coach
+                <MapPin size={14} />
+                {deliveryModeLabel(offer.delivery_mode)}
               </span>
             </div>
             <strong className="offer-list-price">
@@ -235,8 +259,14 @@ export function OfferManager({
           <form className="modal sc-card offer-modal" onSubmit={submit}>
             <div className="panel-heading">
               <div>
-                <p className="eyebrow">Bookable session</p>
-                <h2>{editingId ? "Edit session" : "Create session"}</h2>
+                <p className="eyebrow">
+                  Bookable {serviceLabelSingular.toLowerCase()}
+                </p>
+                <h2>
+                  {editingId
+                    ? `Edit ${serviceLabelSingular.toLowerCase()}`
+                    : `Create ${serviceLabelSingular.toLowerCase()}`}
+                </h2>
                 <p>Set the customer-facing details and booking rules.</p>
               </div>
               <button
@@ -249,11 +279,11 @@ export function OfferManager({
             </div>
             <section className="form-section">
               <div className="form-section-heading">
-                <strong>Session details</strong>
+                <strong>{serviceLabelSingular} details</strong>
                 <span>What customers will see before requesting.</span>
               </div>
               <div className="field">
-                <label>Session name</label>
+                <label>{serviceLabelSingular} name</label>
                 <input
                   value={form.title}
                   onChange={(event) =>
@@ -306,9 +336,41 @@ export function OfferManager({
             </section>
             <section className="form-section">
               <div className="form-section-heading">
+                <strong>Delivery</strong>
+                <span>
+                  Choose how this {serviceLabelSingular.toLowerCase()} happens.
+                  Private details are released only after confirmation.
+                </span>
+              </div>
+              <div className="field">
+                <label>How is it delivered?</label>
+                <CustomSelect
+                  value={form.deliveryMode}
+                  options={DELIVERY_MODE_OPTIONS}
+                  onChange={(value) =>
+                    setForm({
+                      ...form,
+                      deliveryMode: value as Offer["delivery_mode"],
+                    })
+                  }
+                />
+                <small className="field-help">
+                  {form.deliveryMode === "in_person"
+                    ? "Add the private address in the booking details after reviewing the request. No meeting link is required."
+                    : form.deliveryMode === "video"
+                      ? "Add a private video link after approval."
+                      : form.deliveryMode === "phone"
+                        ? "Add phone instructions after approval. No meeting link is required."
+                        : "Choose the location, link, or instructions when you review each request."}
+                </small>
+              </div>
+            </section>
+            <section className="form-section">
+              <div className="form-section-heading">
                 <strong>Pricing</strong>
                 <span>
-                  Paid sessions request payment only after you approve the booking.
+                  Paid {serviceLabelPlural.toLowerCase()} request payment only
+                  after you approve the booking.
                 </span>
               </div>
               <div className="choice-row pricing-choice">
@@ -409,6 +471,21 @@ export function OfferManager({
                 </div>
               </div>
             </section>
+            <section className="form-section intake-form-section">
+              <div className="form-section-heading">
+                <strong>Customer intake</strong>
+                <span>
+                  Start from a reusable template, then tailor the questions for
+                  this {serviceLabelSingular.toLowerCase()}.
+                </span>
+              </div>
+              <IntakeFormBuilder
+                value={form.intakeSchema}
+                onChange={(intakeSchema) =>
+                  setForm({ ...form, intakeSchema })
+                }
+              />
+            </section>
             {error && <p className="form-error">{error}</p>}
             <div className="modal-actions sticky-modal-actions">
               <button
@@ -419,7 +496,9 @@ export function OfferManager({
                 Cancel
               </button>
               <button className="sc-btn-primary" disabled={saving}>
-                {saving ? "Saving…" : "Save session"}
+                {saving
+                  ? "Saving…"
+                  : `Save ${serviceLabelSingular.toLowerCase()}`}
               </button>
             </div>
           </form>
@@ -429,8 +508,8 @@ export function OfferManager({
       {pendingArchive && (
         <ConfirmDialog
           title={`Archive “${pendingArchive.title}”?`}
-          description="This removes the session from the customer page immediately. Existing booking history stays intact."
-          confirmLabel="Archive session"
+          description={`This removes the ${serviceLabelSingular.toLowerCase()} from the customer page immediately. Existing booking history stays intact.`}
+          confirmLabel={`Archive ${serviceLabelSingular.toLowerCase()}`}
           busy={archiving}
           onClose={() => setPendingArchive(null)}
           onConfirm={archive}

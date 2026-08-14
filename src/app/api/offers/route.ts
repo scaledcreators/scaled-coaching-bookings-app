@@ -2,6 +2,7 @@ import { z } from "zod";
 import { requireRequestViewer } from "@/lib/auth";
 import { getSingleActiveCoach } from "@/lib/single-coach";
 import { getSupabaseAdmin } from "@/lib/supabase";
+import { intakeSchemaInput } from "@/lib/intake-forms";
 
 export const offerInput = z.object({
   companyId: z.string().startsWith("biz_"), title: z.string().trim().min(2).max(120),
@@ -9,6 +10,8 @@ export const offerInput = z.object({
   pricing: z.enum(["free", "paid"]), priceCents: z.number().int().min(0), status: z.enum(["draft", "published"]).default("published"),
   minNoticeHours: z.number().int().min(0).default(24),
   maxAdvanceDays: z.number().int().min(1).default(60), bufferBeforeMinutes: z.number().int().min(0).default(0), bufferAfterMinutes: z.number().int().min(0).default(15),
+  deliveryMode: z.enum(["in_person", "video", "phone", "decided_later"]).default("decided_later"),
+  intakeSchema: intakeSchemaInput,
 }).superRefine((value, ctx) => { if (value.pricing === "paid" && value.priceCents < 50) ctx.addIssue({ code: "custom", path: ["priceCents"], message: "Paid sessions need an amount of at least $0.50." }); });
 
 export async function POST(request: Request) {
@@ -23,6 +26,7 @@ export async function POST(request: Request) {
       duration_minutes: input.durationMinutes, price_cents: input.pricing === "paid" ? input.priceCents : 0,
       currency: "usd", access_mode: input.pricing, status: input.status, requires_manual_confirmation: true,
       min_notice_hours: input.minNoticeHours, max_advance_days: input.maxAdvanceDays, buffer_before_minutes: input.bufferBeforeMinutes, buffer_after_minutes: input.bufferAfterMinutes,
+      delivery_mode: input.deliveryMode, intake_schema: input.intakeSchema,
     }).select("*").single();
     if (error) throw error;
     const linked = await supabase.from("offer_coaches").insert({

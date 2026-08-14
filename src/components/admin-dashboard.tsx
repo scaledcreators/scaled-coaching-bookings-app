@@ -54,6 +54,8 @@ import {
 } from "@/lib/booking-status";
 import { AppBrand } from "@/components/app-brand";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { readStoredIntakeAnswers } from "@/lib/intake-forms";
+import { deliveryModeLabel } from "@/lib/delivery-mode";
 import {
   TenantThemeProvider,
   useTenantTheme,
@@ -122,6 +124,13 @@ function AdminDashboardContent({
   initialData: DashboardData;
 }) {
   const { settings: tenantSettings, replaceSettings } = useTenantTheme();
+  const navItems = nav.map((item) =>
+    item.key === "bookings"
+      ? { ...item, label: tenantSettings.admin_bookings_label }
+      : item.key === "offers"
+        ? { ...item, label: tenantSettings.service_label_plural }
+        : item,
+  );
   const [section, setSection] = useState<Section>("overview");
   const [mobileNav, setMobileNav] = useState(false);
   const [paused, setPaused] = useState(initialData.emergencyPaused);
@@ -158,7 +167,17 @@ function AdminDashboardContent({
       setPaused(next.emergencyPaused);
       if (section !== "settings") replaceSettings(next.settings);
     },
-    [replaceSettings, section],
+    [
+      replaceSettings,
+      section,
+      setAvailability,
+      setBookings,
+      setCapacityOverrides,
+      setCoaches,
+      setOffers,
+      setPaused,
+      setWindows,
+    ],
   );
   const urgentRefresh = bookings.some(
     (booking) =>
@@ -440,7 +459,7 @@ function AdminDashboardContent({
           </button>
         </div>
         <nav className="side-nav">
-          {nav.map((item) => (
+          {navItems.map((item) => (
             <button
               key={item.key}
               className={section === item.key ? "active" : ""}
@@ -460,7 +479,11 @@ function AdminDashboardContent({
         <div className={`pause-panel ${paused ? "paused" : ""}`}>
           <div>
             <Power size={17} />
-            <strong>{paused ? "Bookings paused" : "Bookings open"}</strong>
+            <strong>
+              {paused
+                ? `${tenantSettings.admin_bookings_label} paused`
+                : `${tenantSettings.admin_bookings_label} open`}
+            </strong>
           </div>
           <p>
             {paused
@@ -468,7 +491,9 @@ function AdminDashboardContent({
               : "Availability rules are active."}
           </p>
           <button onClick={togglePause}>
-            {paused ? "Resume bookings" : "Emergency pause"}
+            {paused
+              ? `Resume ${tenantSettings.admin_bookings_label.toLowerCase()}`
+              : "Emergency pause"}
           </button>
         </div>
       </aside>
@@ -482,7 +507,7 @@ function AdminDashboardContent({
           </button>
           <div>
             <p className="eyebrow">Creator dashboard</p>
-            <h1>{nav.find((item) => item.key === section)?.label}</h1>
+            <h1>{navItems.find((item) => item.key === section)?.label}</h1>
           </div>
           <div className="topbar-actions">
             <RefreshButton
@@ -540,6 +565,8 @@ function AdminDashboardContent({
               setOffers(next);
               void refresh();
             }}
+            serviceLabelSingular={tenantSettings.service_label_singular}
+            serviceLabelPlural={tenantSettings.service_label_plural}
           />
         )}
         {section === "availability" && (
@@ -1314,6 +1341,8 @@ function BookingDetail({
   onClose: () => void;
   onUpdate: (id: string, changes: BookingChanges) => void;
 }) {
+  const deliveryMode = booking.booking_offers?.delivery_mode ?? "decided_later";
+  const intakeResponses = readStoredIntakeAnswers(booking.intake_answers);
   const [form, setForm] = useState({
     meetingLocation: booking.meeting_location ?? "",
     meetingUrl: booking.meeting_url ?? "",
@@ -1371,7 +1400,16 @@ function BookingDetail({
               }
             />
         </div>}
+        <div className="booking-delivery-summary">
+          <span>Delivery</span>
+          <strong>{deliveryModeLabel(deliveryMode)}</strong>
+          <small>
+            Private location, link, and joining details appear to the customer
+            only after confirmation.
+          </small>
+        </div>
         <div className="form-grid">
+          {(deliveryMode === "in_person" || deliveryMode === "decided_later") && (
           <div className="field">
             <label>Meeting location</label>
             <input
@@ -1379,9 +1417,10 @@ function BookingDetail({
               onChange={(event) =>
                 setForm({ ...form, meetingLocation: event.target.value })
               }
-              placeholder="Zoom, Discord, Google Meet…"
+              placeholder="Address, venue, or meeting point"
             />
-          </div>
+          </div>)}
+          {(deliveryMode === "video" || deliveryMode === "decided_later") && (
           <div className="field">
             <label>Private meeting URL</label>
             <input
@@ -1392,7 +1431,7 @@ function BookingDetail({
               }
               placeholder="https://"
             />
-          </div>
+          </div>)}
         </div>
         <div className="field">
           <label>Customer joining instructions</label>
@@ -1425,16 +1464,24 @@ function BookingDetail({
                     : "Free booking"}
             </strong>
           </div>
-          <div>
-            <span>Customer goal</span>
-            <strong>
-              {String(booking.intake_answers?.goal ?? "Not supplied")}
-            </strong>
-          </div>
-          <div>
-            <span>Customer note</span>
-            <strong>{booking.member_note || "None"}</strong>
-          </div>
+          {intakeResponses.map((response, index) => (
+            <div key={`${response.label}-${index}`}>
+              <span>{response.label}</span>
+              <strong>{response.value}</strong>
+            </div>
+          ))}
+          {intakeResponses.length === 0 && (
+            <div>
+              <span>Customer intake</span>
+              <strong>Not supplied</strong>
+            </div>
+          )}
+          {booking.member_note && (
+            <div>
+              <span>Legacy customer note</span>
+              <strong>{booking.member_note}</strong>
+            </div>
+          )}
         </div>
         <div className="modal-actions">
           <button type="button" className="sc-btn-secondary" onClick={onClose}>

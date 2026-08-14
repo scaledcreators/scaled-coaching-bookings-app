@@ -31,7 +31,7 @@ export async function POST(
     const { data: booking, error } = await supabase
       .from("booking_requests")
       .select(
-        "*, booking_offers(title,duration_minutes,price_cents,access_mode,min_notice_hours,max_advance_days,buffer_before_minutes,buffer_after_minutes)",
+        "*, booking_offers(title,duration_minutes,price_cents,access_mode,delivery_mode,min_notice_hours,max_advance_days,buffer_before_minutes,buffer_after_minutes)",
       )
       .eq("id", id)
       .eq("whop_company_id", companyId)
@@ -76,7 +76,7 @@ export async function POST(
         .eq("id", id)
         .eq("status", booking.status)
         .select(
-          "*, booking_offers(title,duration_minutes,price_cents,access_mode)",
+          "*, booking_offers(title,duration_minutes,price_cents,access_mode,delivery_mode)",
         )
         .single();
       if (updateError) throw updateError;
@@ -163,7 +163,7 @@ export async function POST(
     const { data, error: updateError } = await supabase
       .from("booking_requests")
       .select(
-        "*, booking_offers(title,duration_minutes,price_cents,access_mode)",
+        "*, booking_offers(title,duration_minutes,price_cents,access_mode,delivery_mode)",
       )
       .eq("id", id)
       .eq("whop_company_id", companyId)

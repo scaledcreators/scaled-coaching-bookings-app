@@ -74,7 +74,7 @@ export async function getCompanyData(
     supabase
       .from("booking_requests")
       .select(
-        "*, booking_offers(title,duration_minutes,price_cents,access_mode)",
+        "*, booking_offers(title,duration_minutes,price_cents,access_mode,delivery_mode)",
       )
       .eq("whop_company_id", companyId)
       .order("created_at", { ascending: false })
@@ -105,7 +105,7 @@ export async function getCompanyData(
     supabase
       .from("booking_settings")
       .select(
-        "emergency_paused,default_timezone,default_daily_capacity,support_contact",
+        "emergency_paused,default_timezone,default_daily_capacity,support_contact,service_label_singular,service_label_plural,admin_bookings_label,member_bookings_label",
       )
       .eq("whop_company_id", companyId)
       .maybeSingle(),
@@ -165,6 +165,14 @@ export async function getCompanyData(
           ...settings.data,
           support_contact:
             settings.data.support_contact || DEFAULT_SUPPORT_CONTACT,
+          service_label_singular:
+            settings.data.service_label_singular || "Session",
+          service_label_plural:
+            settings.data.service_label_plural || "Sessions",
+          admin_bookings_label:
+            settings.data.admin_bookings_label || "Bookings",
+          member_bookings_label:
+            settings.data.member_bookings_label || "My bookings",
         }
       : {
           ...appearance,
@@ -172,6 +180,10 @@ export async function getCompanyData(
           default_timezone: "America/Chicago",
           default_daily_capacity: 4,
           support_contact: DEFAULT_SUPPORT_CONTACT,
+          service_label_singular: "Session",
+          service_label_plural: "Sessions",
+          admin_bookings_label: "Bookings",
+          member_bookings_label: "My bookings",
         },
     emergencyPaused: settings.data?.emergency_paused ?? false,
     demo: false,

@@ -9,6 +9,13 @@ const migration = readFileSync(
   ),
   "utf8",
 );
+const customizationMigration = readFileSync(
+  join(
+    process.cwd(),
+    "supabase/migrations/202608130001_custom_labels_delivery_and_intake.sql",
+  ),
+  "utf8",
+);
 
 describe("atomic capacity migration contract", () => {
   it("serializes direct creates and reschedules before counting capacity", () => {
@@ -29,5 +36,14 @@ describe("atomic capacity migration contract", () => {
   it("preserves financial records with soft archive fields", () => {
     expect(migration).toContain("admin_archived_at timestamptz");
     expect(migration).not.toMatch(/delete\s+from\s+booking_requests/i);
+  });
+});
+
+describe("customization migration contract", () => {
+  it("adds labels and delivery mode without replacing existing records", () => {
+    expect(customizationMigration).toContain("add column if not exists service_label_singular");
+    expect(customizationMigration).toContain("add column if not exists member_bookings_label");
+    expect(customizationMigration).toContain("add column if not exists delivery_mode");
+    expect(customizationMigration).not.toMatch(/drop\s+table|delete\s+from/i);
   });
 });

@@ -19,6 +19,10 @@ const schema = z.object({
   themePrimary: color,
   themeAccent: color,
   themeHighlight: color,
+  serviceLabelSingular: z.string().trim().min(1).max(30),
+  serviceLabelPlural: z.string().trim().min(1).max(30),
+  adminBookingsLabel: z.string().trim().min(1).max(40),
+  memberBookingsLabel: z.string().trim().min(1).max(40),
 });
 
 export async function POST(request: Request) {
@@ -42,6 +46,10 @@ export async function POST(request: Request) {
       whop_company_id: input.companyId,
       default_timezone: input.defaultTimezone,
       updated_at: new Date().toISOString(),
+      service_label_singular: input.serviceLabelSingular,
+      service_label_plural: input.serviceLabelPlural,
+      admin_bookings_label: input.adminBookingsLabel,
+      member_bookings_label: input.memberBookingsLabel,
     };
     if (input.supportContact !== undefined) {
       settingsUpdate.support_contact = input.supportContact || null;
@@ -51,7 +59,7 @@ export async function POST(request: Request) {
       .from("booking_settings")
       .upsert(settingsUpdate)
       .select(
-        "emergency_paused,default_timezone,default_daily_capacity,support_contact",
+        "emergency_paused,default_timezone,default_daily_capacity,support_contact,service_label_singular,service_label_plural,admin_bookings_label,member_bookings_label",
       )
       .single();
     if (error) throw error;

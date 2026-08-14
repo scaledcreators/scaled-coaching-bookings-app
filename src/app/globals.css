@@ -1454,6 +1454,167 @@ button:disabled {
   }
 }
 
+/* Flexible terminology, delivery, and per-session intake forms */
+.offer-modal {
+  width: min(760px, 100%);
+}
+.terminology-grid {
+  align-items: start;
+}
+.settings-preview-copy {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  margin: 2px 0 0;
+  color: var(--text-2);
+  font-size: 10px;
+}
+.settings-preview-copy strong {
+  color: var(--text);
+}
+.intake-builder {
+  display: grid;
+  gap: 14px;
+}
+.intake-question-list {
+  display: grid;
+  gap: 10px;
+}
+.intake-question-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--sc-bg);
+  padding: 13px;
+}
+.intake-question-card > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.intake-question-card > header > span {
+  color: var(--text-2);
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.intake-question-actions {
+  display: flex;
+  gap: 3px;
+}
+.intake-question-actions button {
+  display: grid;
+  width: 29px;
+  height: 29px;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-2);
+  cursor: pointer;
+}
+.intake-question-actions button:hover:not(:disabled),
+.intake-question-actions button:focus-visible {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+}
+.intake-question-actions button.danger-link {
+  color: var(--danger);
+}
+.intake-question-actions button:disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+}
+.intake-required-check .custom-checkbox {
+  width: fit-content;
+  align-items: center;
+}
+.intake-builder-empty {
+  border: 1px dashed var(--border-2);
+  border-radius: 11px;
+  padding: 18px;
+  text-align: center;
+}
+.intake-builder-empty strong {
+  font-size: 12px;
+}
+.intake-builder-empty p,
+.intake-privacy-note {
+  margin: 5px 0 0;
+  color: var(--text-2);
+  font-size: 10px;
+  line-height: 1.55;
+}
+.intake-add-question {
+  justify-self: start;
+}
+.intake-privacy-note {
+  border-left: 2px solid var(--brand-border-strong);
+  padding-left: 10px;
+}
+.member-intake-fields {
+  display: grid;
+  gap: 14px;
+}
+.member-intake-choices {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+.member-intake-choices legend {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.member-intake-choices .custom-checkbox {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 11px;
+}
+.booking-delivery-summary {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 3px 10px;
+  border: 1px solid var(--brand-border);
+  border-radius: 11px;
+  background: var(--brand-soft);
+  padding: 11px 12px;
+}
+.booking-delivery-summary span {
+  color: var(--text-2);
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.booking-delivery-summary strong {
+  font-size: 12px;
+}
+.booking-delivery-summary small {
+  grid-column: 1 / -1;
+  color: var(--text-2);
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+@media (max-width: 680px) {
+  .terminology-grid,
+  .intake-question-grid {
+    grid-template-columns: 1fr;
+  }
+  .intake-question-card {
+    padding: 11px;
+  }
+}
+
 @media (max-height: 420px) {
   .modal-backdrop.success-backdrop {
     place-items: start center;

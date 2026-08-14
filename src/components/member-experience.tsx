@@ -8,9 +8,12 @@ import {
   Clock3,
   ExternalLink,
   LockKeyhole,
+  MapPin,
   MessageCircle,
+  Phone,
   RefreshCw,
   ShieldCheck,
+  Video,
   X,
 } from "lucide-react";
 import type { Booking, DashboardData, Offer } from "@/lib/types";
@@ -34,6 +37,12 @@ import {
 } from "@/lib/booking-status";
 import { formatPaymentTimeRemaining } from "@/lib/payment-countdown";
 import { getIframeSdk } from "@/lib/iframe-sdk";
+import { CustomSelect } from "@/components/custom-select";
+import { CustomCheckbox } from "@/components/custom-checkbox";
+import {
+  normalizeIntakeSchema,
+} from "@/lib/intake-forms";
+import { deliveryModeLabel } from "@/lib/delivery-mode";
 
 const money = (cents: number) =>
   cents === 0
@@ -125,7 +134,7 @@ function MemberExperienceContent({
   const [bookings, setBookings] = useState(
     data.bookings.filter((booking) => booking.whop_user_id === userId),
   );
-  const { replaceSettings } = useTenantTheme();
+  const { settings, replaceSettings } = useTenantTheme();
   const applyLiveData = useCallback(
     (next: DashboardData) => {
       setLiveData(next);
@@ -156,13 +165,13 @@ function MemberExperienceContent({
             className={view === "offers" ? "active" : ""}
             onClick={() => setView("offers")}
           >
-            Coaching
+            {settings.service_label_plural}
           </button>
           <button
             className={view === "bookings" ? "active" : ""}
             onClick={() => setView("bookings")}
           >
-            My bookings
+            {settings.member_bookings_label}
           </button>
         </div>
         <div className="member-nav-actions">
@@ -208,6 +217,9 @@ function MemberExperienceContent({
               items.map((item) => (item.id === updated.id ? updated : item)),
             )
           }
+          heading={settings.member_bookings_label}
+          serviceLabelSingular={settings.service_label_singular}
+          serviceLabelPlural={settings.service_label_plural}
         />
       )}
       <footer className="member-footer">
@@ -254,15 +266,18 @@ function Offers({
     <>
       <section className="member-hero">
         <div>
-          <p className="eyebrow">Private coaching</p>
+          <p className="eyebrow">
+            Private {data.settings.service_label_plural.toLowerCase()}
+          </p>
           <h1>
             Make your next move
             <br />
             <span className="gradient-text">the right one.</span>
           </h1>
           <p>
-            Choose a session and share what you’d like to work through. Your
-            coach reviews every request personally.
+            Choose a {data.settings.service_label_singular.toLowerCase()} and
+            share what you’d like to work through. Your
+            provider reviews every request personally.
           </p>
         </div>
       </section>
@@ -279,16 +294,19 @@ function Offers({
           <Clock3 />
           <div>
             <strong>New bookings are temporarily paused.</strong>
-            <p>Your existing sessions remain under My bookings.</p>
+            <p>
+              Your existing {data.settings.service_label_plural.toLowerCase()} remain
+              under {data.settings.member_bookings_label}.
+            </p>
           </div>
         </div>
       ) : offers.length === 0 ? (
         <div className="notice-empty member-offers-empty sc-card">
           <CalendarDays />
-          <strong>Coaching sessions are coming soon</strong>
+          <strong>{data.settings.service_label_plural} are coming soon</strong>
           <p>
-            There aren’t any sessions available to request yet. Check back
-            shortly or use Help to contact the team.
+            There aren’t any {data.settings.service_label_plural.toLowerCase()} available
+            to request yet. Check back shortly or use Help to contact the team.
           </p>
         </div>
       ) : (
@@ -298,7 +316,9 @@ function Offers({
               <div className="offer-top">
                 <span className="offer-icon">{offer.duration_minutes}</span>
                 <span className="status-badge draft">
-                  {offer.price_cents ? "Paid coaching" : "Free coaching"}
+                  {offer.price_cents
+                    ? `Paid ${data.settings.service_label_singular.toLowerCase()}`
+                    : `Free ${data.settings.service_label_singular.toLowerCase()}`}
                 </span>
               </div>
               <div>
@@ -313,6 +333,18 @@ function Offers({
                 <span>
                   <CalendarDays size={16} />
                   Personally confirmed
+                </span>
+                <span>
+                  {offer.delivery_mode === "in_person" ? (
+                    <MapPin size={16} />
+                  ) : offer.delivery_mode === "video" ? (
+                    <Video size={16} />
+                  ) : offer.delivery_mode === "phone" ? (
+                    <Phone size={16} />
+                  ) : (
+                    <ShieldCheck size={16} />
+                  )}
+                  {deliveryModeLabel(offer.delivery_mode)}
                 </span>
               </div>
               <div className="offer-footer">
@@ -458,6 +490,9 @@ function MyBookings({
   timezone,
   onChange,
   onRefresh,
+  heading,
+  serviceLabelSingular,
+  serviceLabelPlural,
 }: {
   experienceId: string;
   demo: boolean;
@@ -465,6 +500,9 @@ function MyBookings({
   timezone: string;
   onChange: (booking: Booking) => void;
   onRefresh: () => void;
+  heading: string;
+  serviceLabelSingular: string;
+  serviceLabelPlural: string;
 }) {
   const [dialog, setDialog] = useState<{
     type: "refund" | "reschedule" | "cancel";
@@ -618,12 +656,12 @@ function MyBookings({
   const bookingGroups = [
     {
       title: "Needs action",
-      description: "Complete these steps to secure your session.",
+      description: `Complete these steps to secure your ${serviceLabelSingular.toLowerCase()}.`,
       items: bookings.filter((booking) => booking.status === "pending_payment"),
     },
     {
       title: "Upcoming",
-      description: "Requests under review and confirmed sessions.",
+      description: `Requests under review and confirmed ${serviceLabelPlural.toLowerCase()}.`,
       items: bookings.filter(
         (booking) =>
           booking.status !== "pending_payment" &&
@@ -640,8 +678,8 @@ function MyBookings({
   ].filter((group) => group.items.length > 0);
   return (
     <section className="member-bookings">
-      <p className="eyebrow">Your sessions</p>
-      <h1>My bookings</h1>
+      <p className="eyebrow">Your {serviceLabelPlural.toLowerCase()}</p>
+      <h1>{heading}</h1>
       {paymentNotice && (
         <div className="checkout-banner" role="status">
           <Check size={18} />
@@ -659,8 +697,10 @@ function MyBookings({
         {bookings.length === 0 && (
           <div className="notice-empty sc-card">
             <CalendarDays />
-            <strong>No sessions yet</strong>
-            <p>Choose a coaching session when you’re ready.</p>
+            <strong>No {serviceLabelPlural.toLowerCase()} yet</strong>
+            <p>
+              Choose a {serviceLabelSingular.toLowerCase()} when you’re ready.
+            </p>
           </div>
         )}
         {bookingGroups.map((group) => (
@@ -972,8 +1012,10 @@ function BookingFlow({
       ? previewDays.at(-1)?.date.slice(0, 7) ?? initialMonth
       : initialMonth,
   );
-  const [goal, setGoal] = useState("");
-  const [note, setNote] = useState("");
+  const intakeSchema = normalizeIntakeSchema(offer.intake_schema);
+  const [intakeAnswers, setIntakeAnswers] = useState<
+    Record<string, string | string[]>
+  >({});
   const [sent, setSent] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -1044,8 +1086,8 @@ function BookingFlow({
             offerId: offer.id,
             startsAt: slot,
             timezone,
-            intakeAnswers: { goal },
-            memberNote: note,
+            intakeAnswers,
+            memberNote: "",
           }),
         });
         const body = await response.json();
@@ -1061,6 +1103,13 @@ function BookingFlow({
       setSaving(false);
     }
   }
+  const intakeComplete = intakeSchema.fields.every((field) => {
+    if (!field.required) return true;
+    const answer = intakeAnswers[field.id];
+    return Array.isArray(answer)
+      ? answer.length > 0
+      : typeof answer === "string" && answer.trim().length > 0;
+  });
   if (sent)
     return (
       <OverlayPortal>
@@ -1080,7 +1129,7 @@ function BookingFlow({
               <p>
                 {offer.price_cents > 0
                   ? "No payment has been taken. If approved, you’ll have up to 24 hours to pay and confirm your time."
-                  : "No payment is needed. Your session will be confirmed as soon as the coach approves your request."}
+                  : `No payment is needed. Your ${data.settings.service_label_singular.toLowerCase()} will be confirmed as soon as the coach approves your request.`}
               </p>
             </div>
             <div className="success-next-step">
@@ -1093,7 +1142,7 @@ function BookingFlow({
               </div>
             </div>
             <button className="sc-btn-primary" onClick={onClose}>
-              View my bookings <ArrowRight size={16} />
+              View {data.settings.member_bookings_label.toLowerCase()} <ArrowRight size={16} />
             </button>
           </section>
         </div>
@@ -1157,26 +1206,112 @@ function BookingFlow({
         {step === 2 && (
           <div className="flow-content">
             <p className="eyebrow">A little context</p>
-            <h2>What would make this session a win?</h2>
-            <div className="field">
-              <label>Your main goal</label>
-              <textarea
-                value={goal}
-                onChange={(event) => setGoal(event.target.value)}
-              />
-            </div>
-            <div className="field">
-              <label>
-                Anything else? <span className="muted">Optional</span>
-              </label>
-              <input
-                value={note}
-                onChange={(event) => setNote(event.target.value)}
-              />
+            <h2>{intakeSchema.title || "Before your session"}</h2>
+            {intakeSchema.description && <p>{intakeSchema.description}</p>}
+            {intakeSchema.fields.length === 0 && (
+              <div className="notice">
+                No intake questions are needed for this request.
+              </div>
+            )}
+            <div className="member-intake-fields">
+              {intakeSchema.fields.map((field) => {
+                const answer = intakeAnswers[field.id];
+                const label = (
+                  <>
+                    {field.label}
+                    {!field.required && (
+                      <span className="muted"> Optional</span>
+                    )}
+                  </>
+                );
+                if (field.type === "long_text") {
+                  return (
+                    <div className="field" key={field.id}>
+                      <label>{label}</label>
+                      <textarea
+                        value={typeof answer === "string" ? answer : ""}
+                        placeholder={field.placeholder}
+                        maxLength={4000}
+                        onChange={(event) =>
+                          setIntakeAnswers((current) => ({
+                            ...current,
+                            [field.id]: event.target.value,
+                          }))
+                        }
+                      />
+                    </div>
+                  );
+                }
+                if (field.type === "single_choice" || field.type === "yes_no") {
+                  const options =
+                    field.type === "yes_no"
+                      ? ["Yes", "No"].map((value) => ({ value, label: value }))
+                      : (field.options ?? []).map((value) => ({
+                          value,
+                          label: value,
+                        }));
+                  return (
+                    <div className="field" key={field.id}>
+                      <label>{label}</label>
+                      <CustomSelect
+                        value={typeof answer === "string" ? answer : ""}
+                        options={options}
+                        placeholder="Choose an answer"
+                        onChange={(value) =>
+                          setIntakeAnswers((current) => ({
+                            ...current,
+                            [field.id]: value,
+                          }))
+                        }
+                      />
+                    </div>
+                  );
+                }
+                if (field.type === "multi_choice") {
+                  const selected = Array.isArray(answer) ? answer : [];
+                  return (
+                    <fieldset className="member-intake-choices" key={field.id}>
+                      <legend>{label}</legend>
+                      {(field.options ?? []).map((option) => (
+                        <CustomCheckbox
+                          key={option}
+                          checked={selected.includes(option)}
+                          label={option}
+                          onChange={(checked) =>
+                            setIntakeAnswers((current) => ({
+                              ...current,
+                              [field.id]: checked
+                                ? [...selected, option]
+                                : selected.filter((item) => item !== option),
+                            }))
+                          }
+                        />
+                      ))}
+                    </fieldset>
+                  );
+                }
+                return (
+                  <div className="field" key={field.id}>
+                    <label>{label}</label>
+                    <input
+                      type={field.type === "date" ? "date" : "text"}
+                      value={typeof answer === "string" ? answer : ""}
+                      placeholder={field.placeholder}
+                      maxLength={field.type === "short_text" ? 500 : undefined}
+                      onChange={(event) =>
+                        setIntakeAnswers((current) => ({
+                          ...current,
+                          [field.id]: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+                );
+              })}
             </div>
             <button
               className="sc-btn-primary full-button"
-              disabled={!goal.trim()}
+              disabled={!intakeComplete}
               onClick={() => setStep(3)}
             >
               Review request <ArrowRight size={16} />
@@ -1189,7 +1324,7 @@ function BookingFlow({
             <h2>Ready to send?</h2>
             <div className="request-summary">
               <div>
-                <span>Session</span>
+                <span>{data.settings.service_label_singular}</span>
                 <strong>{offer.title}</strong>
               </div>
               <div>
@@ -1209,6 +1344,19 @@ function BookingFlow({
                   {offer.price_cents ? " after approval via Whop" : ""}
                 </strong>
               </div>
+              <div>
+                <span>Delivery</span>
+                <strong>{deliveryModeLabel(offer.delivery_mode)}</strong>
+              </div>
+              {intakeSchema.fields.length > 0 && (
+                <div>
+                  <span>Intake</span>
+                  <strong>
+                    {intakeSchema.fields.length} answer
+                    {intakeSchema.fields.length === 1 ? "" : "s"} included
+                  </strong>
+                </div>
+              )}
             </div>
             <div className="notice">
               <ShieldCheck size={17} />

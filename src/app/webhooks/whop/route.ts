@@ -78,7 +78,7 @@ async function processEvent(eventId: string, event: WhopEvent) {
     const { data: booking } = await supabase
       .from("booking_requests")
       .select(
-        "*, booking_offers(title,duration_minutes,price_cents,access_mode)",
+        "*, booking_offers(title,duration_minutes,price_cents,access_mode,delivery_mode)",
       )
       .eq("id", bookingId)
       .maybeSingle();

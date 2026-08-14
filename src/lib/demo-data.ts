@@ -19,6 +19,10 @@ export const demoData: DashboardData = {
     theme_primary: "#ff4b18",
     theme_accent: "#a84a32",
     theme_highlight: "#ff7849",
+    service_label_singular: "Session",
+    service_label_plural: "Sessions",
+    admin_bookings_label: "Bookings",
+    member_bookings_label: "My bookings",
   },
   availability: [1, 2, 3, 4, 5].map((weekday) => ({
       id: `rule_graham_${weekday}`,
@@ -62,6 +66,8 @@ export const demoData: DashboardData = {
       buffer_before_minutes: 0,
       buffer_after_minutes: 15,
       capacity_per_slot: 1,
+      delivery_mode: "video",
+      intake_schema: {},
     },
     {
       id: "offer_audit",
@@ -82,6 +88,8 @@ export const demoData: DashboardData = {
       buffer_before_minutes: 15,
       buffer_after_minutes: 15,
       capacity_per_slot: 1,
+      delivery_mode: "video",
+      intake_schema: {},
     },
     {
       id: "offer_member",
@@ -102,6 +110,8 @@ export const demoData: DashboardData = {
       buffer_before_minutes: 0,
       buffer_after_minutes: 15,
       capacity_per_slot: 1,
+      delivery_mode: "decided_later",
+      intake_schema: {},
     },
   ],
   bookings: [
@@ -130,6 +140,7 @@ export const demoData: DashboardData = {
         duration_minutes: 45,
         price_cents: 25000,
         access_mode: "paid",
+        delivery_mode: "video",
       },
     },
     {
@@ -158,6 +169,7 @@ export const demoData: DashboardData = {
         duration_minutes: 60,
         price_cents: 35000,
         access_mode: "paid",
+        delivery_mode: "video",
       },
     },
   ],

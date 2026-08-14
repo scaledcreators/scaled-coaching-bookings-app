@@ -15,7 +15,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     if (["requested", "processing", "refunded"].includes(booking.refund_status)) return Response.json({ error: "A refund is already being handled for this booking." }, { status: 409 });
     if (["completed", "no_show"].includes(booking.status)) return Response.json({ error: "This booking is no longer eligible for a refund request." }, { status: 409 });
     const now = new Date().toISOString();
-    const { data, error: updateError } = await supabase.from("booking_requests").update({ status: "cancelled", refund_status: "requested", refund_reason: input.reason, refund_requested_at: now, updated_at: now }).eq("id", id).select("*, booking_offers(title,duration_minutes,price_cents,access_mode)").single();
+    const { data, error: updateError } = await supabase.from("booking_requests").update({ status: "cancelled", refund_status: "requested", refund_reason: input.reason, refund_requested_at: now, updated_at: now }).eq("id", id).select("*, booking_offers(title,duration_minutes,price_cents,access_mode,delivery_mode)").single();
     if (updateError) throw updateError;
     await supabase.from("booking_messages").insert({ booking_request_id: id, sender: "member", body: `Refund requested: ${input.reason}` });
     return Response.json({ booking: data });
